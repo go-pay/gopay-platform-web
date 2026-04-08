@@ -46,7 +46,7 @@
               <th style="width: 160px">应用名称</th>
               <th style="width: 140px">AppID</th>
               <th style="width: 120px">所属商户</th>
-              <th style="width: 140px">平台类型</th>
+              <th style="width: 150px">平台类型</th>
               <th style="width: 100px">商户类型</th>
               <th style="width: 80px">状态</th>
               <th style="width: 160px">创建时间</th>
