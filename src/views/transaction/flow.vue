@@ -63,7 +63,7 @@
         <div class="stat-icon stat-icon-green"><span class="mdi mdi-swap-horizontal"></span></div>
         <div class="stat-info">
           <div class="stat-label">总交易笔数</div>
-          <div class="stat-value">{{ flowList.length }}</div>
+          <div class="stat-value">{{ totalCount }}</div>
         </div>
       </div>
     </div>
@@ -103,7 +103,7 @@
               </td>
               <td>{{ item.merchantName }}</td>
               <td :class="['font-medium', item.direction === 'in' ? 'text-income' : 'text-expense']">
-                {{ item.direction === 'in' ? '+' : '-' }}{{ item.amount.toFixed(2) }}
+                {{ item.direction === 'in' ? '+' : '-' }}{{ formatAmount(item.amount) }}
               </td>
               <td>
                 <span :class="['chip', item.channelType === 'alipay' ? 'chip-blue' : 'chip-green']">
@@ -132,7 +132,7 @@
         </table>
       </div>
 
-      <div class="table-footer">共 {{ flowList.length }} 条</div>
+      <div class="table-footer">共 {{ total }} 条</div>
     </v-card>
 
     <!-- 详情弹窗 -->
@@ -144,7 +144,10 @@
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </div>
-        <div class="dialog-body" v-if="detailItem">
+        <div class="dialog-body dialog-loading" v-if="detailLoading">
+          <span class="mdi mdi-loading mdi-spin"></span> 加载中...
+        </div>
+        <div class="dialog-body" v-else-if="detailItem">
           <div class="detail-section">
             <div class="detail-title">流水信息</div>
             <div class="detail-grid">
@@ -162,7 +165,7 @@
               <div class="detail-item">
                 <span class="detail-label">交易金额</span>
                 <span :class="['amount-text', detailItem.direction === 'in' ? 'text-income' : 'text-expense']">
-                  {{ detailItem.direction === 'in' ? '+' : '-' }}¥{{ detailItem.amount.toFixed(2) }}
+                  {{ detailItem.direction === 'in' ? '+' : '-' }}¥{{ formatAmount(detailItem.amount) }}
                 </span>
               </div>
               <div class="detail-item">
@@ -190,53 +193,85 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
-
-interface FlowItem {
-  id: number
-  flowNo: string
-  orderNo: string
-  type: 'pay' | 'refund' | 'transfer'
-  merchantName: string
-  amount: number
-  channelType: 'alipay' | 'wechat'
-  channelFlowNo: string
-  direction: 'in' | 'out'
-  status: number // 0-处理中 1-已完成
-  remark: string
-  ctime: string
-}
+import { ref, reactive, onMounted } from 'vue'
+import { getFlowList, getFlowStats, getFlowDetail, type FlowItem } from '@/api/transaction'
 
 const searchForm = reactive({ flowNo: '', orderNo: '', type: '', channelType: '', date: '' })
 
-const flowList = ref<FlowItem[]>([
-  { id: 1, flowNo: 'FLW20260401001', orderNo: 'PAY20260401100001', type: 'pay', merchantName: '星辰科技有限公司', amount: 299.00, channelType: 'alipay', channelFlowNo: '2026040122001401001234567', direction: 'in', status: 1, remark: '会员充值-月卡', ctime: '2026-04-01 10:00:35' },
-  { id: 2, flowNo: 'FLW20260401002', orderNo: 'PAY20260401100002', type: 'pay', merchantName: '云海数字传媒', amount: 59.90, channelType: 'wechat', channelFlowNo: '4200001234202604010012345', direction: 'in', status: 1, remark: '广告投放服务费', ctime: '2026-04-01 11:30:22' },
-  { id: 3, flowNo: 'FLW20260402001', orderNo: 'REF20260402001', type: 'refund', merchantName: '星辰科技有限公司', amount: 299.00, channelType: 'alipay', channelFlowNo: '2026040200000001', direction: 'out', status: 1, remark: '用户申请退款', ctime: '2026-04-02 10:00:25' },
-  { id: 4, flowNo: 'FLW20260402002', orderNo: 'TRF20260401001', type: 'transfer', merchantName: '星辰科技有限公司', amount: 5000.00, channelType: 'alipay', channelFlowNo: '20260401110070001001', direction: 'out', status: 1, remark: '佣金结算', ctime: '2026-04-01 10:00:30' },
-  { id: 5, flowNo: 'FLW20260403001', orderNo: 'PAY20260403100001', type: 'pay', merchantName: '蓝鲸网络科技', amount: 520.00, channelType: 'alipay', channelFlowNo: '2026040322001401009876543', direction: 'in', status: 1, remark: 'API调用包', ctime: '2026-04-03 08:45:18' },
-  { id: 6, flowNo: 'FLW20260403002', orderNo: 'REF20260403001', type: 'refund', merchantName: '云海数字传媒', amount: 30.00, channelType: 'wechat', channelFlowNo: '4200009999202604030000001', direction: 'out', status: 1, remark: '部分退款-服务未使用', ctime: '2026-04-03 14:30:45' },
-  { id: 7, flowNo: 'FLW20260404001', orderNo: 'TRF20260402001', type: 'transfer', merchantName: '云海数字传媒', amount: 2000.00, channelType: 'wechat', channelFlowNo: '1342000001202604020000001', direction: 'out', status: 1, remark: '创作者收益提现', ctime: '2026-04-02 14:00:45' },
-  { id: 8, flowNo: 'FLW20260405001', orderNo: 'PAY20260405100001', type: 'pay', merchantName: '云海数字传媒', amount: 168.00, channelType: 'wechat', channelFlowNo: '4200005678202604050098765', direction: 'in', status: 1, remark: '内容订阅-季度', ctime: '2026-04-05 10:30:15' },
-  { id: 9, flowNo: 'FLW20260405002', orderNo: 'TRF20260405001', type: 'transfer', merchantName: '星辰科技有限公司', amount: 3600.00, channelType: 'alipay', channelFlowNo: '20260405110070001005', direction: 'out', status: 1, remark: '推广奖励', ctime: '2026-04-05 11:00:25' },
-  { id: 10, flowNo: 'FLW20260406001', orderNo: 'PAY20260406100001', type: 'pay', merchantName: '星辰科技有限公司', amount: 88.00, channelType: 'alipay', channelFlowNo: '2026040622001401005554321', direction: 'in', status: 1, remark: '增值服务', ctime: '2026-04-06 15:20:30' },
-  { id: 11, flowNo: 'FLW20260406002', orderNo: 'TRF20260406001', type: 'transfer', merchantName: '九州在线商贸', amount: 15000.00, channelType: 'wechat', channelFlowNo: '1342000001202604060000002', direction: 'out', status: 1, remark: '月度分成', ctime: '2026-04-06 08:45:40' },
-  { id: 12, flowNo: 'FLW20260406003', orderNo: 'REF20260406001', type: 'refund', merchantName: '星辰科技有限公司', amount: 88.00, channelType: 'alipay', channelFlowNo: '2026040600000005', direction: 'out', status: 1, remark: '用户取消订单', ctime: '2026-04-06 17:00:30' },
-])
+const flowList = ref<FlowItem[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
 
-const incomeTotal = computed(() => flowList.value.filter(f => f.direction === 'in' && f.status === 1).reduce((s, f) => s + f.amount, 0).toFixed(2))
-const expenseTotal = computed(() => flowList.value.filter(f => f.direction === 'out' && f.status === 1).reduce((s, f) => s + f.amount, 0).toFixed(2))
+const incomeTotal = ref('0.00')
+const expenseTotal = ref('0.00')
+const totalCount = ref(0)
 
 const showDetail = ref(false)
 const detailItem = ref<FlowItem | null>(null)
+const detailLoading = ref(false)
 
-function typeLabel(t: string) { return { pay: '支付', refund: '退款', transfer: '转账' }[t] || t }
-function typeChipClass(t: string) { return { pay: 'chip-blue', refund: 'chip-red', transfer: 'chip-amber' }[t] || 'chip-grey' }
+function formatAmount(fen: number) {
+  return (fen / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 
-function handleSearch() { /* Mock */ }
-function handleReset() { searchForm.flowNo = ''; searchForm.orderNo = ''; searchForm.type = ''; searchForm.channelType = ''; searchForm.date = '' }
+function typeLabel(t: string) { return ({ pay: '支付', refund: '退款', transfer: '转账' } as Record<string, string>)[t] || t }
+function typeChipClass(t: string) { return ({ pay: 'chip-blue', refund: 'chip-red', transfer: 'chip-amber' } as Record<string, string>)[t] || 'chip-grey' }
+
+async function fetchList() {
+  const res = await getFlowList({
+    page: page.value,
+    pageSize: pageSize.value,
+    flowNo: searchForm.flowNo || undefined,
+    orderNo: searchForm.orderNo || undefined,
+    type: searchForm.type,
+    channelType: searchForm.channelType,
+    date: searchForm.date || undefined,
+  })
+  flowList.value = res.list ?? []
+  total.value = res.total ?? 0
+}
+
+async function fetchStats() {
+  const res = await getFlowStats()
+  incomeTotal.value = formatAmount(res.incomeTotal)
+  expenseTotal.value = formatAmount(res.expenseTotal)
+  totalCount.value = res.totalCount
+}
+
+async function handleSearch() {
+  page.value = 1
+  await fetchList()
+}
+
+async function handleReset() {
+  searchForm.flowNo = ''
+  searchForm.orderNo = ''
+  searchForm.type = ''
+  searchForm.channelType = ''
+  searchForm.date = ''
+  page.value = 1
+  await fetchList()
+}
+
 function handleExport() { alert('导出功能开发中') }
-function openDetail(item: FlowItem) { detailItem.value = item; showDetail.value = true }
+
+async function openDetail(item: FlowItem) {
+  showDetail.value = true
+  detailLoading.value = true
+  detailItem.value = null
+  try {
+    const res = await getFlowDetail(item.id)
+    detailItem.value = res
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchList()
+  fetchStats()
+})
 </script>
 
 <style scoped>
@@ -305,4 +340,5 @@ function openDetail(item: FlowItem) { detailItem.value = item; showDetail.value 
 .detail-label { font-size: 12px; color: #94A3B8; }
 .detail-item > span:last-child, .detail-item > code { font-size: 14px; color: #334155; }
 .amount-text { font-weight: 600; font-size: 16px !important; }
+.dialog-loading { display: flex; align-items: center; justify-content: center; gap: 8px; color: #94A3B8; font-size: 14px; min-height: 80px; }
 </style>

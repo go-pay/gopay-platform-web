@@ -107,7 +107,7 @@
         </table>
       </div>
 
-      <div class="table-footer">共 {{ channelList.length }} 条</div>
+      <div class="table-footer">共 {{ total }} 条</div>
     </v-card>
 
     <!-- 新增/编辑弹窗 -->
@@ -312,7 +312,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { getChannelList, addChannel, updateChannel, toggleChannelStatus, getChannelDetail, saveChannelConfig } from '@/api/channel'
+import { getMerchantOptions } from '@/api/merchant'
 
 interface ChannelConfig {
   appId: string
@@ -350,54 +352,39 @@ const allPayMethods = [
   { value: 'miniapp', label: '小程序支付' },
 ]
 
-const merchantOptions = [
-  { id: 1, name: '星辰科技有限公司' },
-  { id: 2, name: '云海数字传媒' },
-  { id: 3, name: '极光电子商务' },
-  { id: 5, name: '蓝鲸网络科技' },
-  { id: 6, name: '九州在线商贸' },
-]
+const merchantOptions = ref<{ id: number; name: string }[]>([])
 
 const searchForm = reactive({ name: '', code: '', type: '', status: '' })
 
-const channelList = ref<ChannelItem[]>([
-  {
-    id: 1, name: '支付宝当面付', code: 'alipay_face', type: 'alipay', merchantId: 1, merchantName: '星辰科技有限公司',
-    payMethods: ['qrcode', 'page'], feeRate: 0.6, status: 1, remark: '主力支付宝通道',
-    ctime: '2026-03-16 10:00:00',
-    config: { appId: '2026032200001234', privateKey: '******', publicKey: '******', notifyUrl: 'https://api.xingchen.com/alipay/notify', signType: 'RSA2', sandbox: false },
-  },
-  {
-    id: 2, name: '支付宝手机网站', code: 'alipay_wap', type: 'alipay', merchantId: 1, merchantName: '星辰科技有限公司',
-    payMethods: ['wap'], feeRate: 0.6, status: 1, remark: '',
-    ctime: '2026-03-17 11:20:00',
-    config: { appId: '2026032200001234', privateKey: '******', publicKey: '******', notifyUrl: 'https://api.xingchen.com/alipay/notify', signType: 'RSA2', sandbox: false },
-  },
-  {
-    id: 3, name: '微信JSAPI支付', code: 'wechat_jsapi', type: 'wechat', merchantId: 2, merchantName: '云海数字传媒',
-    payMethods: ['jsapi'], feeRate: 0.6, status: 1, remark: '公众号内支付',
-    ctime: '2026-03-20 09:00:00',
-    config: { appId: 'wx9876543210fedcba', mchId: '1600234567', privateKey: '******', apiKey: '******', notifyUrl: 'https://api.yunhai.com/wechat/notify' },
-  },
-  {
-    id: 4, name: '微信Native支付', code: 'wechat_native', type: 'wechat', merchantId: 3, merchantName: '极光电子商务',
-    payMethods: ['qrcode'], feeRate: 0.55, status: 1, remark: 'PC网站扫码支付',
-    ctime: '2026-04-01 16:20:00',
-    config: { appId: '2026040100005678', mchId: '1600345678', privateKey: '******', apiKey: '******', notifyUrl: 'https://api.jiguang.com/wechat/notify' },
-  },
-  {
-    id: 5, name: '微信小程序支付', code: 'wechat_miniapp', type: 'wechat', merchantId: 5, merchantName: '蓝鲸网络科技',
-    payMethods: ['miniapp', 'jsapi'], feeRate: 0.6, status: 0, remark: '待接入',
-    ctime: '2026-04-03 11:45:00',
-    config: {},
-  },
-  {
-    id: 6, name: '支付宝小程序', code: 'alipay_miniapp', type: 'alipay', merchantId: 6, merchantName: '九州在线商贸',
-    payMethods: ['miniapp'], feeRate: 0.55, status: 1, remark: '',
-    ctime: '2026-04-05 14:00:00',
-    config: { appId: '2026040500009012', privateKey: '******', publicKey: '******', notifyUrl: 'https://api.jiuzhou.com/alipay/notify', signType: 'RSA2', sandbox: false },
-  },
-])
+const channelList = ref<ChannelItem[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
+const loading = ref(false)
+
+async function loadData() {
+  loading.value = true
+  try {
+    const statusVal = searchForm.status === '' ? -1 : Number(searchForm.status)
+    const res = await getChannelList({
+      page: page.value,
+      pageSize: pageSize.value,
+      name: searchForm.name || undefined,
+      code: searchForm.code || undefined,
+      type: searchForm.type || undefined,
+      status: statusVal,
+    })
+    channelList.value = res.list
+    total.value = res.total
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  loadData()
+  getMerchantOptions().then(list => { merchantOptions.value = list })
+})
 
 // 新增/编辑
 const showDialog = ref(false)
@@ -426,31 +413,31 @@ function openDialog(mode: 'add' | 'edit', item?: ChannelItem) {
   showDialog.value = true
 }
 
-function handleSubmit() {
+async function handleSubmit() {
   if (!form.name || !form.code || !form.type || !form.merchantId || !form.payMethods.length || form.feeRate === '') return
   if (dialogMode.value === 'add') {
-    const maxId = Math.max(...channelList.value.map(c => c.id), 0)
-    const merchant = merchantOptions.find(m => m.id === Number(form.merchantId))
-    channelList.value.unshift({
-      id: maxId + 1, name: form.name, code: form.code, type: form.type as 'alipay' | 'wechat',
-      merchantId: Number(form.merchantId), merchantName: merchant?.name || '',
-      payMethods: [...form.payMethods], feeRate: Number(form.feeRate),
-      status: 1, remark: form.remark,
-      ctime: new Date().toISOString().replace('T', ' ').slice(0, 19),
-      config: {},
+    await addChannel({
+      name: form.name,
+      code: form.code,
+      type: form.type,
+      merchantId: Number(form.merchantId),
+      payMethods: [...form.payMethods],
+      feeRate: Number(form.feeRate),
+      remark: form.remark || undefined,
     })
   } else {
-    const idx = channelList.value.findIndex(c => c.id === editingId.value)
-    if (idx !== -1) {
-      const merchant = merchantOptions.find(m => m.id === Number(form.merchantId))
-      Object.assign(channelList.value[idx], {
-        name: form.name, type: form.type, merchantId: Number(form.merchantId),
-        merchantName: merchant?.name || '', payMethods: [...form.payMethods],
-        feeRate: Number(form.feeRate), remark: form.remark,
-      })
-    }
+    await updateChannel({
+      id: editingId.value!,
+      name: form.name,
+      type: form.type,
+      merchantId: Number(form.merchantId),
+      payMethods: [...form.payMethods],
+      feeRate: Number(form.feeRate),
+      remark: form.remark || undefined,
+    })
   }
   showDialog.value = false
+  loadData()
 }
 
 // 参数配置
@@ -474,22 +461,20 @@ function openConfigDialog(item: ChannelItem) {
   showConfigDialog.value = true
 }
 
-function handleSaveConfig() {
+async function handleSaveConfig() {
   if (!configItem.value) return
-  const item = channelList.value.find(c => c.id === configItem.value!.id)
-  if (item) {
-    item.config = {
-      appId: configForm.appId,
-      privateKey: configForm.privateKey || '******',
-      publicKey: configForm.publicKey || '******',
-      mchId: configForm.mchId,
-      apiKey: configForm.apiKey || '******',
-      serialNo: configForm.serialNo,
-      notifyUrl: configForm.notifyUrl,
-      signType: configForm.signType,
-      sandbox: configForm.sandbox,
-    }
-  }
+  await saveChannelConfig({
+    channelId: configItem.value.id,
+    appId: configForm.appId,
+    privateKey: configForm.privateKey,
+    publicKey: configForm.publicKey,
+    mchId: configForm.mchId,
+    apiKey: configForm.apiKey,
+    serialNo: configForm.serialNo,
+    notifyUrl: configForm.notifyUrl,
+    signType: configForm.signType,
+    sandbox: configForm.sandbox,
+  })
   showConfigDialog.value = false
 }
 
@@ -497,17 +482,19 @@ function handleSaveConfig() {
 const showDetailDialog = ref(false)
 const detailItem = ref<ChannelItem | null>(null)
 
-function openDetailDialog(item: ChannelItem) {
-  detailItem.value = item
+async function openDetailDialog(item: ChannelItem) {
+  const detail = await getChannelDetail(item.id)
+  detailItem.value = detail
   showDetailDialog.value = true
 }
 
 // 其他
-function handleSearch() { /* Mock */ }
-function handleReset() { searchForm.name = ''; searchForm.code = ''; searchForm.type = ''; searchForm.status = '' }
+function handleSearch() { page.value = 1; loadData() }
+function handleReset() { searchForm.name = ''; searchForm.code = ''; searchForm.type = ''; searchForm.status = ''; page.value = 1; loadData() }
 
-function handleToggleStatus(item: ChannelItem) {
-  item.status = item.status === 1 ? 0 : 1
+async function handleToggleStatus(item: ChannelItem) {
+  await toggleChannelStatus(item.id)
+  loadData()
 }
 
 function payMethodLabel(m: string) {

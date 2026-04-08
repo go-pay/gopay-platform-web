@@ -93,7 +93,7 @@
         </table>
       </div>
 
-      <div class="table-footer">共 {{ applyList.length }} 条</div>
+      <div class="table-footer">共 {{ total }} 条</div>
     </v-card>
 
     <!-- 新建进件弹窗 -->
@@ -238,41 +238,51 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { getApplyList, addApply, submitApply, reviewApply, uploadImage } from '@/api/incoming'
+import type { ApplyItem } from '@/api/incoming'
+import { getMerchantOptions } from '@/api/merchant'
 
-interface ApplyItem {
-  id: number
-  applyNo: string
-  merchantId: number
-  merchantName: string
-  channelType: 'alipay' | 'wechat'
-  merchantNo: string
-  licenseNo: string
-  legalPerson: string
-  phone: string
-  status: number // 0-待提交 1-审核中 2-已通过 3-已驳回
-  remark: string
-  ctime: string
-}
-
-const merchantOptions = [
-  { id: 1, name: '星辰科技有限公司' },
-  { id: 2, name: '云海数字传媒' },
-  { id: 3, name: '极光电子商务' },
-  { id: 5, name: '蓝鲸网络科技' },
-  { id: 6, name: '九州在线商贸' },
-]
+const merchantOptions = ref<{ id: number; name: string }[]>([])
 
 const searchForm = reactive({ merchantName: '', status: '', channelType: '' })
 
-const applyList = ref<ApplyItem[]>([
-  { id: 1, applyNo: 'INC20260401001', merchantId: 1, merchantName: '星辰科技有限公司', channelType: 'alipay', merchantNo: '2088441234567890', licenseNo: '91110108MA12345678', legalPerson: '张三', phone: '13800138001', status: 2, remark: '审核通过', ctime: '2026-04-01 10:00:00' },
-  { id: 2, applyNo: 'INC20260402001', merchantId: 1, merchantName: '星辰科技有限公司', channelType: 'wechat', merchantNo: '1600123456', licenseNo: '91110108MA12345678', legalPerson: '张三', phone: '13800138001', status: 2, remark: '', ctime: '2026-04-02 14:30:00' },
-  { id: 3, applyNo: 'INC20260403001', merchantId: 2, merchantName: '云海数字传媒', channelType: 'alipay', merchantNo: '', licenseNo: '91310115MA87654321', legalPerson: '李四', phone: '13800138002', status: 1, remark: '', ctime: '2026-04-03 09:15:00' },
-  { id: 4, applyNo: 'INC20260404001', merchantId: 3, merchantName: '极光电子商务', channelType: 'wechat', merchantNo: '', licenseNo: '91440300MA11112222', legalPerson: '王五', phone: '13800138003', status: 3, remark: '资料不完整，请补充营业执照副本', ctime: '2026-04-04 16:00:00' },
-  { id: 5, applyNo: 'INC20260405001', merchantId: 5, merchantName: '蓝鲸网络科技', channelType: 'alipay', merchantNo: '', licenseNo: '91330100MA33334444', legalPerson: '孙七', phone: '13800138005', status: 0, remark: '', ctime: '2026-04-05 11:30:00' },
-  { id: 6, applyNo: 'INC20260406001', merchantId: 6, merchantName: '九州在线商贸', channelType: 'wechat', merchantNo: '', licenseNo: '91510100MA55556666', legalPerson: '周八', phone: '13800138006', status: 0, remark: '', ctime: '2026-04-06 08:45:00' },
-])
+const applyList = ref<ApplyItem[]>([])
+const total = ref(0)
+const loading = ref(false)
+
+async function loadData() {
+  loading.value = true
+  try {
+    const statusVal = searchForm.status === '' ? -1 : Number(searchForm.status)
+    const res = await getApplyList({
+      page: 1,
+      pageSize: 50,
+      merchantName: searchForm.merchantName || undefined,
+      status: statusVal,
+      channelType: searchForm.channelType || undefined,
+    })
+    applyList.value = res.list
+    total.value = res.total
+  } catch (e: any) {
+    alert(e.message || '加载数据失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadMerchantOptions() {
+  try {
+    merchantOptions.value = await getMerchantOptions()
+  } catch {
+    // 静默失败，不影响主流程
+  }
+}
+
+onMounted(() => {
+  loadData()
+  loadMerchantOptions()
+})
 
 const showDialog = ref(false)
 const form = reactive({
@@ -289,22 +299,25 @@ function resetForm() {
 
 type PhotoField = 'licensePhoto' | 'idCardFront' | 'idCardBack'
 
-function readFileAsDataURL(file: File, field: PhotoField) {
+async function uploadFile(file: File, field: PhotoField) {
   if (!file.type.startsWith('image/')) return
   if (file.size > 5 * 1024 * 1024) { alert('文件大小不能超过 5MB'); return }
-  const reader = new FileReader()
-  reader.onload = (e) => { form[field] = e.target?.result as string }
-  reader.readAsDataURL(file)
+  try {
+    const res = await uploadImage(file)
+    form[field] = res.url
+  } catch (e: any) {
+    alert(e.message || '图片上传失败')
+  }
 }
 
 function handleFileChange(e: Event, field: PhotoField) {
   const file = (e.target as HTMLInputElement).files?.[0]
-  if (file) readFileAsDataURL(file, field)
+  if (file) uploadFile(file, field)
 }
 
 function handleDrop(e: DragEvent, field: PhotoField) {
   const file = e.dataTransfer?.files?.[0]
-  if (file) readFileAsDataURL(file, field)
+  if (file) uploadFile(file, field)
 }
 
 const showReviewDialog = ref(false)
@@ -320,17 +333,27 @@ function statusChipClass(s: number) {
   return ['chip-grey', 'chip-amber', 'chip-green', 'chip-red'][s] || 'chip-grey'
 }
 
-function handleSearch() { /* Mock */ }
-function handleReset() { searchForm.merchantName = ''; searchForm.status = ''; searchForm.channelType = '' }
+function handleSearch() { loadData() }
+function handleReset() {
+  searchForm.merchantName = ''
+  searchForm.status = ''
+  searchForm.channelType = ''
+  loadData()
+}
 
 function handleView(item: ApplyItem) {
   alert(`查看进件详情: ${item.applyNo}\n商户: ${item.merchantName}\n通道: ${item.channelType === 'alipay' ? '支付宝' : '微信支付'}\n状态: ${statusLabel(item.status)}`)
 }
 
-function handleEdit(_item: ApplyItem) { /* TODO */ }
+function handleEdit(_item: ApplyItem) { /* TODO: 打开编辑弹窗 */ }
 
-function handleSubmitReview(item: ApplyItem) {
-  item.status = 1
+async function handleSubmitReview(item: ApplyItem) {
+  try {
+    await submitApply(item.id)
+    await loadData()
+  } catch (e: any) {
+    alert(e.message || '提交审核失败')
+  }
 }
 
 function handleReview(item: ApplyItem) {
@@ -340,44 +363,65 @@ function handleReview(item: ApplyItem) {
   showReviewDialog.value = true
 }
 
-function handleConfirmReview() {
+async function handleConfirmReview() {
   if (!reviewResult.value || !reviewItem.value) return
-  const item = applyList.value.find(a => a.id === reviewItem.value!.id)
-  if (item) {
-    item.status = reviewResult.value === 'pass' ? 2 : 3
-    item.remark = reviewRemark.value || (reviewResult.value === 'pass' ? '审核通过' : '审核驳回')
+  try {
+    await reviewApply({
+      id: reviewItem.value.id,
+      action: reviewResult.value as 'pass' | 'reject',
+      remark: reviewRemark.value || undefined,
+    })
+    showReviewDialog.value = false
+    await loadData()
+  } catch (e: any) {
+    alert(e.message || '审核操作失败')
   }
-  showReviewDialog.value = false
 }
 
-function handleSaveDraft() {
+async function handleSaveDraft() {
   if (!form.merchantId || !form.channelType) return
-  const merchant = merchantOptions.find(m => m.id === Number(form.merchantId))
-  const maxId = Math.max(...applyList.value.map(a => a.id), 0)
-  applyList.value.unshift({
-    id: maxId + 1, applyNo: `INC${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${String(maxId + 1).padStart(3, '0')}`,
-    merchantId: Number(form.merchantId), merchantName: merchant?.name || '',
-    channelType: form.channelType as 'alipay' | 'wechat', merchantNo: form.merchantNo,
-    licenseNo: form.licenseNo, legalPerson: form.legalPerson, phone: form.phone,
-    status: 0, remark: form.remark,
-    ctime: new Date().toISOString().replace('T', ' ').slice(0, 19),
-  })
-  showDialog.value = false
+  try {
+    await addApply({
+      merchantId: Number(form.merchantId),
+      channelType: form.channelType,
+      merchantNo: form.merchantNo || undefined,
+      licenseNo: form.licenseNo,
+      licenseImg: form.licensePhoto || undefined,
+      legalPerson: form.legalPerson,
+      idCardFront: form.idCardFront || undefined,
+      idCardBack: form.idCardBack || undefined,
+      phone: form.phone,
+      remark: form.remark || undefined,
+      submit: false,
+    })
+    showDialog.value = false
+    await loadData()
+  } catch (e: any) {
+    alert(e.message || '保存草稿失败')
+  }
 }
 
-function handleSubmitApply() {
+async function handleSubmitApply() {
   if (!form.merchantId || !form.channelType || !form.licenseNo) return
-  const merchant = merchantOptions.find(m => m.id === Number(form.merchantId))
-  const maxId = Math.max(...applyList.value.map(a => a.id), 0)
-  applyList.value.unshift({
-    id: maxId + 1, applyNo: `INC${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${String(maxId + 1).padStart(3, '0')}`,
-    merchantId: Number(form.merchantId), merchantName: merchant?.name || '',
-    channelType: form.channelType as 'alipay' | 'wechat', merchantNo: form.merchantNo,
-    licenseNo: form.licenseNo, legalPerson: form.legalPerson, phone: form.phone,
-    status: 1, remark: form.remark,
-    ctime: new Date().toISOString().replace('T', ' ').slice(0, 19),
-  })
-  showDialog.value = false
+  try {
+    await addApply({
+      merchantId: Number(form.merchantId),
+      channelType: form.channelType,
+      merchantNo: form.merchantNo || undefined,
+      licenseNo: form.licenseNo,
+      licenseImg: form.licensePhoto || undefined,
+      legalPerson: form.legalPerson,
+      idCardFront: form.idCardFront || undefined,
+      idCardBack: form.idCardBack || undefined,
+      phone: form.phone,
+      remark: form.remark || undefined,
+      submit: true,
+    })
+    showDialog.value = false
+    await loadData()
+  } catch (e: any) {
+    alert(e.message || '提交审核失败')
+  }
 }
 </script>
 

@@ -72,11 +72,17 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in orderList" :key="item.id">
+            <tr v-if="loading">
+              <td colspan="10" class="loading-cell">加载中...</td>
+            </tr>
+            <tr v-else-if="orders.length === 0">
+              <td colspan="10" class="empty-cell">暂无数据</td>
+            </tr>
+            <tr v-for="item in orders" :key="item.id">
               <td><code class="code-text">{{ item.orderNo }}</code></td>
               <td><code class="code-text">{{ item.outTradeNo }}</code></td>
               <td>{{ item.merchantName }}</td>
-              <td class="font-medium">{{ item.amount.toFixed(2) }}</td>
+              <td class="font-medium">¥{{ formatAmount(item.amount) }}</td>
               <td>
                 <span :class="['chip', item.channelType === 'alipay' ? 'chip-blue' : 'chip-green']">
                   {{ item.channelType === 'alipay' ? '支付宝' : '微信支付' }}
@@ -95,7 +101,7 @@
                 <v-btn v-if="item.status === 0" icon variant="text" size="x-small" title="关闭订单" @click="handleClose(item)">
                   <v-icon size="18" color="#EF4444">mdi-close-circle-outline</v-icon>
                 </v-btn>
-                <v-btn v-if="item.status === 1" icon variant="text" size="x-small" title="发起退款" @click="handleRefund(item)">
+                <v-btn v-if="item.status === 1" icon variant="text" size="x-small" title="发起退款" @click="openRefund(item)">
                   <v-icon size="18" color="#F59E0B">mdi-cash-refund</v-icon>
                 </v-btn>
               </td>
@@ -105,8 +111,12 @@
       </div>
 
       <div class="table-footer">
-        <span class="table-summary">总金额: <strong>¥{{ totalAmount }}</strong></span>
-        <span>共 {{ orderList.length }} 条</span>
+        <span class="table-summary">共 <strong>{{ total }}</strong> 条记录</span>
+        <div class="pagination">
+          <button class="page-btn" :disabled="page <= 1" @click="changePage(page - 1)">上一页</button>
+          <span class="page-info">第 {{ page }} 页 / 共 {{ totalPages }} 页</span>
+          <button class="page-btn" :disabled="page >= totalPages" @click="changePage(page + 1)">下一页</button>
+        </div>
       </div>
     </v-card>
 
@@ -126,7 +136,7 @@
               <div class="detail-item"><span class="detail-label">订单号</span><code class="code-text">{{ detailItem.orderNo }}</code></div>
               <div class="detail-item"><span class="detail-label">商户订单号</span><code class="code-text">{{ detailItem.outTradeNo }}</code></div>
               <div class="detail-item"><span class="detail-label">商户名称</span><span>{{ detailItem.merchantName }}</span></div>
-              <div class="detail-item"><span class="detail-label">订单金额</span><span class="amount-text">¥{{ detailItem.amount.toFixed(2) }}</span></div>
+              <div class="detail-item"><span class="detail-label">订单金额</span><span class="amount-text">¥{{ formatAmount(detailItem.amount) }}</span></div>
               <div class="detail-item">
                 <span class="detail-label">支付状态</span>
                 <span :class="['chip', statusChipClass(detailItem.status)]">{{ statusLabel(detailItem.status) }}</span>
@@ -158,48 +168,188 @@
         </div>
       </v-card>
     </v-dialog>
+
+    <!-- 退款弹窗 -->
+    <v-dialog v-model="showRefund" max-width="440">
+      <v-card rounded="lg">
+        <div class="dialog-header">
+          <span class="dialog-title">发起退款</span>
+          <v-btn icon variant="text" size="small" @click="showRefund = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </div>
+        <div class="dialog-body" v-if="refundTarget">
+          <div class="detail-section">
+            <div class="detail-grid">
+              <div class="detail-item"><span class="detail-label">订单号</span><code class="code-text">{{ refundTarget.orderNo }}</code></div>
+              <div class="detail-item"><span class="detail-label">订单金额</span><span class="amount-text">¥{{ formatAmount(refundTarget.amount) }}</span></div>
+            </div>
+          </div>
+          <div class="field-group" style="margin-top: 4px;">
+            <label class="field-label">退款金额（元）</label>
+            <input v-model="refundForm.amountYuan" type="number" class="field-input" style="width: 100%;" placeholder="请输入退款金额" min="0.01" :max="refundTarget.amount / 100" step="0.01" />
+          </div>
+          <div class="field-group" style="margin-top: 12px;">
+            <label class="field-label">退款原因</label>
+            <input v-model="refundForm.reason" type="text" class="field-input" style="width: 100%;" placeholder="请输入退款原因" />
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn btn-outlined" @click="showRefund = false">取消</button>
+          <button class="btn btn-primary" :disabled="refundLoading" @click="confirmRefund">
+            {{ refundLoading ? '提交中...' : '确认退款' }}
+          </button>
+        </div>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
-
-interface PaymentOrder {
-  id: number
-  orderNo: string
-  outTradeNo: string
-  tradeNo: string
-  merchantId: number
-  merchantName: string
-  amount: number
-  channelType: 'alipay' | 'wechat'
-  payMethod: string
-  status: number // 0-待支付 1-支付成功 2-支付失败 3-已关闭
-  subject: string
-  clientIp: string
-  notified: boolean
-  remark: string
-  ctime: string
-  payTime: string
-}
+import { ref, reactive, computed, onMounted } from 'vue'
+import { getPaymentOrderList, getPaymentOrderDetail, closePaymentOrder, refundPaymentOrder, exportPaymentOrders } from '@/api/order'
+import type { PaymentOrder } from '@/api/order'
 
 const searchForm = reactive({ orderNo: '', merchantName: '', status: '', channelType: '', date: '' })
 
-const orderList = ref<PaymentOrder[]>([
-  { id: 1, orderNo: 'PAY20260401100001', outTradeNo: 'M20260401001', tradeNo: '2026040122001401001234567', merchantId: 1, merchantName: '星辰科技有限公司', amount: 299.00, channelType: 'alipay', payMethod: 'qrcode', status: 1, subject: '会员充值-月卡', clientIp: '192.168.1.100', notified: true, remark: '', ctime: '2026-04-01 10:00:12', payTime: '2026-04-01 10:00:35' },
-  { id: 2, orderNo: 'PAY20260401100002', outTradeNo: 'M20260401002', tradeNo: '4200001234202604010012345', merchantId: 2, merchantName: '云海数字传媒', amount: 59.90, channelType: 'wechat', payMethod: 'jsapi', status: 1, subject: '广告投放服务费', clientIp: '10.0.0.55', notified: true, remark: '', ctime: '2026-04-01 11:30:05', payTime: '2026-04-01 11:30:22' },
-  { id: 3, orderNo: 'PAY20260402100001', outTradeNo: 'M20260402001', tradeNo: '', merchantId: 3, merchantName: '极光电子商务', amount: 1280.00, channelType: 'alipay', payMethod: 'page', status: 0, subject: '年度服务费', clientIp: '172.16.0.33', notified: false, remark: '', ctime: '2026-04-02 09:15:30', payTime: '' },
-  { id: 4, orderNo: 'PAY20260402100002', outTradeNo: 'M20260402002', tradeNo: '', merchantId: 1, merchantName: '星辰科技有限公司', amount: 49.00, channelType: 'wechat', payMethod: 'miniapp', status: 2, subject: '商品购买', clientIp: '192.168.1.101', notified: false, remark: '余额不足', ctime: '2026-04-02 14:20:00', payTime: '' },
-  { id: 5, orderNo: 'PAY20260403100001', outTradeNo: 'M20260403001', tradeNo: '2026040322001401009876543', merchantId: 5, merchantName: '蓝鲸网络科技', amount: 520.00, channelType: 'alipay', payMethod: 'wap', status: 1, subject: 'API调用包', clientIp: '10.10.1.200', notified: true, remark: '', ctime: '2026-04-03 08:45:00', payTime: '2026-04-03 08:45:18' },
-  { id: 6, orderNo: 'PAY20260404100001', outTradeNo: 'M20260404001', tradeNo: '', merchantId: 6, merchantName: '九州在线商贸', amount: 3999.00, channelType: 'wechat', payMethod: 'qrcode', status: 3, subject: '平台使用费', clientIp: '192.168.10.50', notified: false, remark: '超时未支付，自动关闭', ctime: '2026-04-04 16:00:00', payTime: '' },
-  { id: 7, orderNo: 'PAY20260405100001', outTradeNo: 'M20260405001', tradeNo: '4200005678202604050098765', merchantId: 2, merchantName: '云海数字传媒', amount: 168.00, channelType: 'wechat', payMethod: 'jsapi', status: 1, subject: '内容订阅-季度', clientIp: '10.0.0.56', notified: true, remark: '', ctime: '2026-04-05 10:30:00', payTime: '2026-04-05 10:30:15' },
-  { id: 8, orderNo: 'PAY20260406100001', outTradeNo: 'M20260406001', tradeNo: '2026040622001401005554321', merchantId: 1, merchantName: '星辰科技有限公司', amount: 88.00, channelType: 'alipay', payMethod: 'qrcode', status: 1, subject: '增值服务', clientIp: '192.168.1.102', notified: true, remark: '', ctime: '2026-04-06 15:20:00', payTime: '2026-04-06 15:20:30' },
-])
+const orders = ref<PaymentOrder[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
+const loading = ref(false)
 
-const totalAmount = computed(() => orderList.value.filter(o => o.status === 1).reduce((s, o) => s + o.amount, 0).toFixed(2))
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+
+function formatAmount(fen: number): string {
+  return (fen / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+async function loadData() {
+  loading.value = true
+  try {
+    const params: Parameters<typeof getPaymentOrderList>[0] = {
+      page: page.value,
+      pageSize: pageSize.value,
+    }
+    if (searchForm.orderNo) params.orderNo = searchForm.orderNo
+    if (searchForm.merchantName) params.merchantName = searchForm.merchantName
+    if (searchForm.channelType) params.channelType = searchForm.channelType
+    if (searchForm.date) params.date = searchForm.date
+    params.status = searchForm.status === '' ? -1 : Number(searchForm.status)
+
+    const res = await getPaymentOrderList(params)
+    orders.value = res.list
+    total.value = res.total
+  } catch (e) {
+    console.error('加载支付订单失败', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => loadData())
+
+function changePage(p: number) {
+  page.value = p
+  loadData()
+}
 
 const showDetail = ref(false)
 const detailItem = ref<PaymentOrder | null>(null)
+
+async function openDetail(item: PaymentOrder) {
+  try {
+    const res = await getPaymentOrderDetail(item.id)
+    detailItem.value = res
+  } catch (e) {
+    console.error('获取订单详情失败', e)
+    detailItem.value = item
+  }
+  showDetail.value = true
+}
+
+// 退款弹窗
+const showRefund = ref(false)
+const refundTarget = ref<PaymentOrder | null>(null)
+const refundLoading = ref(false)
+const refundForm = reactive({ amountYuan: '', reason: '' })
+
+function openRefund(item: PaymentOrder) {
+  refundTarget.value = item
+  refundForm.amountYuan = (item.amount / 100).toFixed(2)
+  refundForm.reason = ''
+  showRefund.value = true
+}
+
+async function confirmRefund() {
+  if (!refundTarget.value) return
+  const amountYuan = parseFloat(refundForm.amountYuan)
+  if (!amountYuan || amountYuan <= 0) {
+    alert('请输入有效的退款金额')
+    return
+  }
+  const maxYuan = refundTarget.value.amount / 100
+  if (amountYuan > maxYuan) {
+    alert(`退款金额不能超过订单金额 ¥${formatAmount(refundTarget.value.amount)}`)
+    return
+  }
+  refundLoading.value = true
+  try {
+    await refundPaymentOrder({
+      id: refundTarget.value.id,
+      amount: Math.round(amountYuan * 100),
+      reason: refundForm.reason,
+    })
+    showRefund.value = false
+    await loadData()
+  } catch (e) {
+    console.error('发起退款失败', e)
+    alert('发起退款失败，请重试')
+  } finally {
+    refundLoading.value = false
+  }
+}
+
+async function handleClose(item: PaymentOrder) {
+  if (!confirm(`确认关闭订单 ${item.orderNo}？`)) return
+  try {
+    await closePaymentOrder(item.id)
+    await loadData()
+  } catch (e) {
+    console.error('关闭订单失败', e)
+    alert('关闭订单失败，请重试')
+  }
+}
+
+async function handleExport() {
+  const params: Record<string, unknown> = {}
+  if (searchForm.orderNo) params.orderNo = searchForm.orderNo
+  if (searchForm.merchantName) params.merchantName = searchForm.merchantName
+  if (searchForm.channelType) params.channelType = searchForm.channelType
+  if (searchForm.date) params.date = searchForm.date
+  params.status = searchForm.status === '' ? -1 : Number(searchForm.status)
+  try {
+    await exportPaymentOrders(params)
+  } catch (e) {
+    console.error('导出失败', e)
+    alert('导出失败，请重试')
+  }
+}
+
+function handleSearch() {
+  page.value = 1
+  loadData()
+}
+
+function handleReset() {
+  searchForm.orderNo = ''
+  searchForm.merchantName = ''
+  searchForm.status = ''
+  searchForm.channelType = ''
+  searchForm.date = ''
+  page.value = 1
+  loadData()
+}
 
 function statusLabel(s: number) {
   return ['待支付', '支付成功', '支付失败', '已关闭'][s] || '未知'
@@ -213,16 +363,6 @@ function payMethodLabel(m: string) {
   const map: Record<string, string> = { qrcode: '扫码支付', page: '网页支付', wap: 'WAP支付', app: 'APP支付', jsapi: 'JSAPI', miniapp: '小程序' }
   return map[m] || m
 }
-
-function handleSearch() { /* Mock */ }
-function handleReset() { searchForm.orderNo = ''; searchForm.merchantName = ''; searchForm.status = ''; searchForm.channelType = ''; searchForm.date = '' }
-function handleExport() { alert('导出功能开发中') }
-
-function openDetail(item: PaymentOrder) { detailItem.value = item; showDetail.value = true }
-
-function handleClose(item: PaymentOrder) { item.status = 3; item.remark = '手动关闭' }
-
-function handleRefund(item: PaymentOrder) { alert(`发起退款: ${item.orderNo}，金额 ¥${item.amount.toFixed(2)}`) }
 </script>
 
 <style scoped>
@@ -238,9 +378,10 @@ function handleRefund(item: PaymentOrder) { alert(`发起退款: ${item.orderNo}
 .field-select { height: 34px; padding: 0 28px 0 12px; border: 1px solid #E2E8F0; border-radius: 6px; font-size: 13px; color: #334155; outline: none; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%2394A3B8' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") no-repeat right 8px center; appearance: none; cursor: pointer; min-width: 130px; }
 .field-select:focus { border-color: #3B9EFF; box-shadow: 0 0 0 2px rgba(59,158,255,0.1); }
 .btn { height: 34px; padding: 0 18px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; border: none; transition: all 0.15s; }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-icon { margin-right: 4px; font-size: 16px; }
 .btn-primary { background: linear-gradient(135deg, #3B9EFF, #7BBFFF); color: #fff; box-shadow: 0 1px 3px rgba(59,158,255,0.3); }
-.btn-primary:hover { box-shadow: 0 2px 8px rgba(59,158,255,0.4); }
+.btn-primary:hover:not(:disabled) { box-shadow: 0 2px 8px rgba(59,158,255,0.4); }
 .btn-outlined { background: #fff; color: #64748B; border: 1px solid #E2E8F0; }
 .btn-outlined:hover { border-color: #CBD5E1; background: #F8FAFC; }
 .table-card { overflow: hidden; }
@@ -251,10 +392,16 @@ function handleRefund(item: PaymentOrder) { alert(`发起退款: ${item.orderNo}
 .table-footer { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; color: #94A3B8; font-size: 13px; border-top: 1px solid #F1F5F9; }
 .table-summary { color: #475569; }
 .table-summary strong { color: #1E293B; font-size: 14px; }
+.pagination { display: flex; align-items: center; gap: 10px; }
+.page-btn { height: 30px; padding: 0 14px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; background: #fff; color: #64748B; border: 1px solid #E2E8F0; transition: all 0.15s; }
+.page-btn:hover:not(:disabled) { border-color: #CBD5E1; background: #F8FAFC; }
+.page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.page-info { font-size: 13px; color: #64748B; }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th { font-weight: 600; color: #64748B; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; background: #FAFBFC; padding: 12px 16px; text-align: left; border-bottom: 1px solid #F1F5F9; white-space: nowrap; }
 .data-table td { font-size: 13px; padding: 14px 16px; border-bottom: 1px solid #F8FAFC; color: #334155; vertical-align: middle; white-space: nowrap; }
 .data-table tbody tr:hover { background: #F8FAFC; }
+.loading-cell, .empty-cell { text-align: center; color: #94A3B8; padding: 40px 0 !important; }
 .font-medium { font-weight: 500; }
 .text-grey { color: #94A3B8; }
 .code-text { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: #475569; background: #F8FAFC; padding: 2px 6px; border-radius: 4px; }

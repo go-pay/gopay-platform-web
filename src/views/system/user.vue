@@ -75,7 +75,7 @@
           </tbody>
         </table>
       </div>
-      <div class="table-footer">共 {{ userList.length }} 条</div>
+      <div class="table-footer">共 {{ total }} 条</div>
     </v-card>
 
     <!-- 新增/编辑弹窗 -->
@@ -127,31 +127,53 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-
-interface UserItem {
-  id: number; username: string; realName: string; phone: string; email: string
-  role: string; status: number; ctime: string; lastLogin: string
-}
+import { ref, reactive, onMounted } from 'vue'
+import { getUserList, addUser, updateUser, toggleUserStatus, resetUserPwd, type UserItem } from '@/api/system'
 
 const searchForm = reactive({ username: '', phone: '', status: '' })
 
-const userList = ref<UserItem[]>([
-  { id: 1, username: 'admin', realName: '超级管理员', phone: '13800000001', email: 'admin@gopay.com', role: 'admin', status: 1, ctime: '2026-01-01 00:00:00', lastLogin: '2026-04-07 09:30:00' },
-  { id: 2, username: 'zhangsan', realName: '张三', phone: '13800138001', email: 'zhangsan@gopay.com', role: 'operator', status: 1, ctime: '2026-03-15 10:00:00', lastLogin: '2026-04-06 14:20:00' },
-  { id: 3, username: 'lisi', realName: '李四', phone: '13800138002', email: 'lisi@gopay.com', role: 'finance', status: 1, ctime: '2026-03-18 11:00:00', lastLogin: '2026-04-05 16:00:00' },
-  { id: 4, username: 'wangwu', realName: '王五', phone: '13800138003', email: 'wangwu@gopay.com', role: 'operator', status: 0, ctime: '2026-03-20 09:00:00', lastLogin: '2026-03-28 10:00:00' },
-  { id: 5, username: 'zhaoliu', realName: '赵六', phone: '13800138004', email: 'zhaoliu@gopay.com', role: 'viewer', status: 1, ctime: '2026-04-01 14:00:00', lastLogin: '2026-04-07 08:00:00' },
-])
+const userList = ref<UserItem[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
+const loading = ref(false)
 
 const showDialog = ref(false)
 const dialogMode = ref<'add' | 'edit'>('add')
 const editingId = ref<number | null>(null)
 const form = reactive({ username: '', password: '', realName: '', phone: '', email: '', role: '' })
 
-function roleLabel(r: string) { return { admin: '管理员', operator: '运营', finance: '财务', viewer: '只读' }[r] || r }
-function handleSearch() {}
-function handleReset() { searchForm.username = ''; searchForm.phone = ''; searchForm.status = '' }
+function roleLabel(r: string) { return ({ admin: '管理员', operator: '运营', finance: '财务', viewer: '只读' } as Record<string, string>)[r] || r }
+
+async function loadData() {
+  loading.value = true
+  try {
+    const statusParam = searchForm.status === '' ? -1 : Number(searchForm.status)
+    const res = await getUserList({
+      page: page.value,
+      pageSize: pageSize.value,
+      username: searchForm.username || undefined,
+      phone: searchForm.phone || undefined,
+      status: statusParam,
+    })
+    userList.value = res.list
+    total.value = res.total
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => loadData())
+
+function handleSearch() {
+  page.value = 1
+  loadData()
+}
+
+function handleReset() {
+  searchForm.username = ''; searchForm.phone = ''; searchForm.status = ''
+  handleSearch()
+}
 
 function openDialog(mode: 'add' | 'edit', item?: UserItem) {
   dialogMode.value = mode; editingId.value = null
@@ -163,21 +185,42 @@ function openDialog(mode: 'add' | 'edit', item?: UserItem) {
   showDialog.value = true
 }
 
-function handleSubmit() {
-  if (!form.username || !form.realName || !form.role) return
+async function handleSubmit() {
+  if (!form.username || !form.role) return
   if (dialogMode.value === 'add') {
     if (!form.password) return
-    const maxId = Math.max(...userList.value.map(u => u.id), 0)
-    userList.value.unshift({ id: maxId + 1, username: form.username, realName: form.realName, phone: form.phone, email: form.email, role: form.role, status: 1, ctime: new Date().toISOString().replace('T', ' ').slice(0, 19), lastLogin: '' })
+    await addUser({
+      username: form.username,
+      password: form.password,
+      realName: form.realName || undefined,
+      phone: form.phone || undefined,
+      email: form.email || undefined,
+      role: form.role || undefined,
+    })
   } else {
-    const idx = userList.value.findIndex(u => u.id === editingId.value)
-    if (idx !== -1) Object.assign(userList.value[idx], { realName: form.realName, phone: form.phone, email: form.email, role: form.role })
+    if (editingId.value === null) return
+    await updateUser({
+      id: editingId.value,
+      realName: form.realName || undefined,
+      phone: form.phone || undefined,
+      email: form.email || undefined,
+      role: form.role || undefined,
+    })
   }
   showDialog.value = false
+  loadData()
 }
 
-function handleResetPwd(item: UserItem) { alert(`已重置用户 ${item.username} 的密码为默认密码`) }
-function handleToggle(item: UserItem) { item.status = item.status === 1 ? 0 : 1 }
+async function handleResetPwd(item: UserItem) {
+  if (!confirm(`确定要重置用户 ${item.username} 的密码为默认密码吗？`)) return
+  await resetUserPwd(item.id)
+  alert(`用户 ${item.username} 的密码已重置为默认密码`)
+}
+
+async function handleToggle(item: UserItem) {
+  await toggleUserStatus(item.id)
+  loadData()
+}
 </script>
 
 <style scoped>

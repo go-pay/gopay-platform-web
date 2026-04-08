@@ -66,28 +66,32 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, computed } from 'vue'
+import { reactive, computed, onMounted } from 'vue'
+import { useUserStore } from '@/store/user'
+import { changePwdApi } from '@/api/auth'
 
-const userInfo = reactive({
-  username: 'admin',
-  realName: '超级管理员',
-  phone: '13800000001',
-  email: 'admin@gopay.com',
-  role: 'admin',
-  lastLogin: '2026-04-07 09:30:00',
-})
+const userStore = useUserStore()
 
-const avatarLetter = computed(() => (userInfo.realName || userInfo.username || 'A').charAt(0).toUpperCase())
+onMounted(() => { userStore.fetchUserInfo() })
+
+const userInfo = computed(() => userStore.userInfo || { username: '', realName: '', phone: '', email: '', role: '', lastLogin: '' })
+
+const avatarLetter = computed(() => (userInfo.value.realName || userInfo.value.username || 'A').charAt(0).toUpperCase())
 
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
 
 function roleLabel(r: string) { return { admin: '管理员', operator: '运营', finance: '财务', viewer: '只读' }[r] || r }
 
-function handleChangePwd() {
+async function handleChangePwd() {
   if (!pwdForm.oldPassword || !pwdForm.newPassword || !pwdForm.confirmPassword) return alert('请填写完整')
   if (pwdForm.newPassword !== pwdForm.confirmPassword) return alert('两次密码不一致')
-  alert('密码修改成功')
-  pwdForm.oldPassword = ''; pwdForm.newPassword = ''; pwdForm.confirmPassword = ''
+  try {
+    await changePwdApi(pwdForm)
+    alert('密码修改成功')
+    pwdForm.oldPassword = ''; pwdForm.newPassword = ''; pwdForm.confirmPassword = ''
+  } catch (e: any) {
+    alert(e?.message || '密码修改失败')
+  }
 }
 </script>
 

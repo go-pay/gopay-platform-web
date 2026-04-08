@@ -85,7 +85,7 @@
       </div>
 
       <div class="table-footer">
-        <span>共 {{ apps.length }} 条</span>
+        <span>共 {{ total }} 条</span>
       </div>
     </v-card>
 
@@ -147,21 +147,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { getMerchantAppList, addMerchantApp, updateMerchantApp, type MerchantApp } from '@/api/merchantApp'
+import { getMerchantOptions } from '@/api/merchant'
 
-interface MerchantApp {
-  id: number
-  name: string
-  appid: string
-  merchantId: number
-  merchantName: string
-  platformType: number
-  merchantType: number
-  status: number
-  notifyUrl: string
-  returnUrl: string
-  ctime: string
-}
+const route = useRoute()
 
 const platformTypes = [
   { value: 0, label: '微信移动应用' },
@@ -173,22 +164,41 @@ const platformTypes = [
   { value: 7, label: '支付宝生活号' },
 ]
 
-const merchantOptions = [
-  { id: 1, name: '星辰科技有限公司' },
-  { id: 2, name: '云海数字传媒' },
-  { id: 3, name: '极光电子商务' },
-  { id: 5, name: '蓝鲸网络科技' },
-]
+const merchantOptions = ref<{ id: number; name: string }[]>([])
 
-const searchForm = reactive({ name: '', appid: '', platformType: '' })
+// 从 URL query 参数获取默认 merchantId 筛选
+const defaultMerchantId = route.query.merchantId ? Number(route.query.merchantId) : undefined
 
-const apps = ref<MerchantApp[]>([
-  { id: 1, name: '星辰小程序', appid: 'wx1234567890abcdef', merchantId: 1, merchantName: '星辰科技有限公司', platformType: 3, merchantType: 0, status: 1, notifyUrl: 'https://api.xingchen.com/notify', returnUrl: 'https://www.xingchen.com/return', ctime: '2026-03-16 10:00:00' },
-  { id: 2, name: '星辰支付宝', appid: '2026032200001234', merchantId: 1, merchantName: '星辰科技有限公司', platformType: 5, merchantType: 0, status: 1, notifyUrl: 'https://api.xingchen.com/ali-notify', returnUrl: 'https://www.xingchen.com/ali-return', ctime: '2026-03-17 14:30:00' },
-  { id: 3, name: '云海公众号', appid: 'wx9876543210fedcba', merchantId: 2, merchantName: '云海数字传媒', platformType: 2, merchantType: 0, status: 1, notifyUrl: 'https://api.yunhai.com/notify', returnUrl: '', ctime: '2026-03-20 09:00:00' },
-  { id: 4, name: '极光网站支付', appid: '2026040100005678', merchantId: 3, merchantName: '极光电子商务', platformType: 5, merchantType: 0, status: 1, notifyUrl: 'https://api.jiguang.com/notify', returnUrl: 'https://pay.jiguang.com/return', ctime: '2026-04-01 16:20:00' },
-  { id: 5, name: '蓝鲸移动支付', appid: 'wx5555666677778888', merchantId: 5, merchantName: '蓝鲸网络科技', platformType: 0, merchantType: 1, status: 1, notifyUrl: 'https://api.lanjing.com/pay/notify', returnUrl: '', ctime: '2026-04-03 11:45:00' },
-])
+const searchForm = reactive({
+  name: '',
+  appid: '',
+  platformType: '' as string | number,
+  merchantId: defaultMerchantId as number | undefined,
+})
+
+const apps = ref<MerchantApp[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
+const loading = ref(false)
+
+async function loadData() {
+  loading.value = true
+  try {
+    const res = await getMerchantAppList({
+      page: page.value,
+      pageSize: pageSize.value,
+      name: searchForm.name || undefined,
+      appid: searchForm.appid || undefined,
+      platformType: searchForm.platformType !== '' ? Number(searchForm.platformType) : -1,
+      merchantId: searchForm.merchantId || 0,
+    })
+    apps.value = res.list
+    total.value = res.total
+  } finally {
+    loading.value = false
+  }
+}
 
 const showDialog = ref(false)
 const dialogMode = ref<'add' | 'edit'>('add')
@@ -205,8 +215,19 @@ function resetForm() {
   editingId.value = null
 }
 
-function handleSearch() { /* Mock */ }
-function handleReset() { searchForm.name = ''; searchForm.appid = ''; searchForm.platformType = '' }
+async function handleSearch() {
+  page.value = 1
+  await loadData()
+}
+
+function handleReset() {
+  searchForm.name = ''
+  searchForm.appid = ''
+  searchForm.platformType = ''
+  searchForm.merchantId = undefined
+  page.value = 1
+  loadData()
+}
 
 function handleEdit(item: MerchantApp) {
   dialogMode.value = 'edit'
@@ -221,30 +242,31 @@ function handleConfig(item: MerchantApp) {
   alert(`配置应用: ${item.name} (${item.appid})`)
 }
 
-function handleSubmit() {
+async function handleSubmit() {
   if (!form.name || !form.appid || !form.merchantId || form.platformType === '') return
   if (dialogMode.value === 'add') {
-    const maxId = Math.max(...apps.value.map(a => a.id), 0)
-    const merchant = merchantOptions.find(m => m.id === Number(form.merchantId))
-    apps.value.unshift({
-      id: maxId + 1, name: form.name, appid: form.appid,
-      merchantId: Number(form.merchantId), merchantName: merchant?.name || '',
-      platformType: Number(form.platformType), merchantType: form.merchantType,
-      status: 1, notifyUrl: form.notifyUrl, returnUrl: form.returnUrl,
-      ctime: new Date().toISOString().replace('T', ' ').slice(0, 19),
+    await addMerchantApp({
+      name: form.name,
+      appid: form.appid,
+      merchantId: Number(form.merchantId),
+      platformType: Number(form.platformType),
+      merchantType: form.merchantType,
+      notifyUrl: form.notifyUrl || undefined,
+      returnUrl: form.returnUrl || undefined,
     })
   } else {
-    const idx = apps.value.findIndex(a => a.id === editingId.value)
-    if (idx !== -1) {
-      const merchant = merchantOptions.find(m => m.id === Number(form.merchantId))
-      Object.assign(apps.value[idx], {
-        name: form.name, appid: form.appid, merchantId: Number(form.merchantId),
-        merchantName: merchant?.name || '', platformType: Number(form.platformType),
-        merchantType: form.merchantType, notifyUrl: form.notifyUrl, returnUrl: form.returnUrl,
-      })
-    }
+    await updateMerchantApp({
+      id: editingId.value!,
+      name: form.name,
+      merchantId: Number(form.merchantId),
+      platformType: Number(form.platformType),
+      merchantType: form.merchantType,
+      notifyUrl: form.notifyUrl || undefined,
+      returnUrl: form.returnUrl || undefined,
+    })
   }
   showDialog.value = false
+  await loadData()
 }
 
 function getPlatformLabel(type: number): string {
@@ -255,6 +277,11 @@ function getPlatformChipClass(type: number): string {
   if (type <= 4) return 'chip-green'  // 微信系
   return 'chip-blue'  // 支付宝系
 }
+
+onMounted(() => {
+  loadData()
+  getMerchantOptions().then(res => { merchantOptions.value = res })
+})
 </script>
 
 <style scoped>

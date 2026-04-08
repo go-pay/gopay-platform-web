@@ -74,7 +74,7 @@
             <tr v-for="item in transferList" :key="item.id">
               <td><code class="code-text">{{ item.transferNo }}</code></td>
               <td>{{ item.merchantName }}</td>
-              <td class="font-medium">{{ item.amount.toFixed(2) }}</td>
+              <td class="font-medium">{{ amountToYuan(item.amount) }}</td>
               <td>
                 <span :class="['chip', item.channelType === 'alipay' ? 'chip-blue' : 'chip-green']">
                   {{ item.channelType === 'alipay' ? '支付宝' : '微信支付' }}
@@ -100,7 +100,7 @@
 
       <div class="table-footer">
         <span class="table-summary">总转账: <strong>¥{{ totalTransfer }}</strong></span>
-        <span>共 {{ transferList.length }} 条</span>
+        <span>共 {{ total }} 条</span>
       </div>
     </v-card>
 
@@ -157,7 +157,7 @@
         </div>
         <div class="dialog-footer">
           <button class="btn btn-outlined" @click="showCreateDialog = false">取消</button>
-          <button class="btn btn-primary" @click="handleSubmitTransfer">确认转账</button>
+          <button class="btn btn-primary" :disabled="submitting" @click="handleSubmitTransfer">{{ submitting ? '提交中...' : '确认转账' }}</button>
         </div>
       </v-card>
     </v-dialog>
@@ -177,7 +177,7 @@
             <div class="detail-grid">
               <div class="detail-item"><span class="detail-label">转账单号</span><code class="code-text">{{ detailItem.transferNo }}</code></div>
               <div class="detail-item"><span class="detail-label">商户名称</span><span>{{ detailItem.merchantName }}</span></div>
-              <div class="detail-item"><span class="detail-label">转账金额</span><span class="amount-text">¥{{ detailItem.amount.toFixed(2) }}</span></div>
+              <div class="detail-item"><span class="detail-label">转账金额</span><span class="amount-text">¥{{ amountToYuan(detailItem.amount) }}</span></div>
               <div class="detail-item">
                 <span class="detail-label">通道类型</span>
                 <span :class="['chip', detailItem.channelType === 'alipay' ? 'chip-blue' : 'chip-green']">
@@ -212,48 +212,63 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { getTransferOrderList, addTransferOrder, getTransferOrderDetail, type TransferOrder } from '@/api/order'
+import { getMerchantOptions } from '@/api/merchant'
 
-interface TransferOrder {
-  id: number
-  transferNo: string
-  tradeTransferNo: string
-  merchantId: number
-  merchantName: string
-  amount: number
-  channelType: 'alipay' | 'wechat'
-  payeeType: string
-  payeeAccount: string
-  payeeName: string
-  status: number // 0-处理中 1-成功 2-失败
-  remark: string
-  ctime: string
-  finishTime: string
-}
-
-const merchantOptions = [
-  { id: 1, name: '星辰科技有限公司' },
-  { id: 2, name: '云海数字传媒' },
-  { id: 3, name: '极光电子商务' },
-  { id: 5, name: '蓝鲸网络科技' },
-  { id: 6, name: '九州在线商贸' },
-]
+const merchantOptions = ref<{ id: number; name: string }[]>([])
 
 const searchForm = reactive({ transferNo: '', merchantName: '', status: '', channelType: '' })
 
-const transferList = ref<TransferOrder[]>([
-  { id: 1, transferNo: 'TRF20260401001', tradeTransferNo: '20260401110070001001', merchantId: 1, merchantName: '星辰科技有限公司', amount: 5000.00, channelType: 'alipay', payeeType: 'account', payeeAccount: 'zhangsan@163.com', payeeName: '张三', status: 1, remark: '佣金结算', ctime: '2026-04-01 10:00:00', finishTime: '2026-04-01 10:00:30' },
-  { id: 2, transferNo: 'TRF20260402001', tradeTransferNo: '1342000001202604020000001', merchantId: 2, merchantName: '云海数字传媒', amount: 2000.00, channelType: 'wechat', payeeType: 'openid', payeeAccount: 'oUpF8uMuAJO_M2pxb1Q9zNjWeS6o', payeeName: '李四', status: 1, remark: '创作者收益提现', ctime: '2026-04-02 14:00:00', finishTime: '2026-04-02 14:00:45' },
-  { id: 3, transferNo: 'TRF20260403001', tradeTransferNo: '', merchantId: 3, merchantName: '极光电子商务', amount: 8500.00, channelType: 'alipay', payeeType: 'account', payeeAccount: 'wangwu@corp.com', payeeName: '王五', status: 0, remark: '供应商货款', ctime: '2026-04-03 09:30:00', finishTime: '' },
-  { id: 4, transferNo: 'TRF20260404001', tradeTransferNo: '', merchantId: 5, merchantName: '蓝鲸网络科技', amount: 1200.00, channelType: 'wechat', payeeType: 'openid', payeeAccount: 'oUpF8uGGG_M2pxb1Q9zNjWeS6o', payeeName: '孙七', status: 2, remark: '服务费结算', ctime: '2026-04-04 16:00:00', finishTime: '2026-04-04 16:01:00' },
-  { id: 5, transferNo: 'TRF20260405001', tradeTransferNo: '20260405110070001005', merchantId: 1, merchantName: '星辰科技有限公司', amount: 3600.00, channelType: 'alipay', payeeType: 'phone', payeeAccount: '13800138010', payeeName: '赵六', status: 1, remark: '推广奖励', ctime: '2026-04-05 11:00:00', finishTime: '2026-04-05 11:00:25' },
-  { id: 6, transferNo: 'TRF20260406001', tradeTransferNo: '1342000001202604060000002', merchantId: 6, merchantName: '九州在线商贸', amount: 15000.00, channelType: 'wechat', payeeType: 'openid', payeeAccount: 'oUpF8uHHH_M2pxb1Q9zNjWeS6o', payeeName: '周八', status: 1, remark: '月度分成', ctime: '2026-04-06 08:45:00', finishTime: '2026-04-06 08:45:40' },
-])
+const transferList = ref<TransferOrder[]>([])
+const total = ref(0)
+const loading = ref(false)
 
-const totalTransfer = computed(() => transferList.value.filter(t => t.status === 1).reduce((s, t) => s + t.amount, 0).toFixed(2))
+const totalTransfer = computed(() =>
+  (transferList.value.filter(t => t.status === 1).reduce((s, t) => s + t.amount, 0) / 100).toFixed(2)
+)
+
+function amountToYuan(fen: number) {
+  return (fen / 100).toFixed(2)
+}
+
+async function loadData() {
+  loading.value = true
+  try {
+    const params: Parameters<typeof getTransferOrderList>[0] = {
+      page: 1,
+      pageSize: 50,
+    }
+    if (searchForm.transferNo) params.transferNo = searchForm.transferNo
+    if (searchForm.merchantName) params.merchantName = searchForm.merchantName
+    if (searchForm.status !== '') params.status = Number(searchForm.status)
+    else params.status = -1
+    if (searchForm.channelType) params.channelType = searchForm.channelType
+
+    const res = await getTransferOrderList(params)
+    transferList.value = res.list
+    total.value = res.total
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadMerchantOptions() {
+  try {
+    merchantOptions.value = await getMerchantOptions()
+  } catch {
+    merchantOptions.value = []
+  }
+}
+
+onMounted(() => {
+  loadData()
+  loadMerchantOptions()
+})
 
 // 发起转账
 const showCreateDialog = ref(false)
+const submitting = ref(false)
 const form = reactive({ merchantId: '' as string | number, channelType: '', amount: '' as string | number, payeeType: '', payeeAccount: '', payeeName: '', remark: '' })
 
 function openCreateDialog() {
@@ -262,25 +277,39 @@ function openCreateDialog() {
   showCreateDialog.value = true
 }
 
-function handleSubmitTransfer() {
+async function handleSubmitTransfer() {
   if (!form.merchantId || !form.channelType || !form.amount || !form.payeeType || !form.payeeAccount || !form.payeeName) return
-  const merchant = merchantOptions.find(m => m.id === Number(form.merchantId))
-  const maxId = Math.max(...transferList.value.map(t => t.id), 0)
-  transferList.value.unshift({
-    id: maxId + 1,
-    transferNo: `TRF${new Date().toISOString().slice(0, 10).replace(/-/g, '')}${String(maxId + 1).padStart(3, '0')}`,
-    tradeTransferNo: '', merchantId: Number(form.merchantId), merchantName: merchant?.name || '',
-    amount: Number(form.amount), channelType: form.channelType as 'alipay' | 'wechat',
-    payeeType: form.payeeType, payeeAccount: form.payeeAccount, payeeName: form.payeeName,
-    status: 0, remark: form.remark,
-    ctime: new Date().toISOString().replace('T', ' ').slice(0, 19), finishTime: '',
-  })
-  showCreateDialog.value = false
+  submitting.value = true
+  try {
+    await addTransferOrder({
+      merchantId: Number(form.merchantId),
+      channelType: form.channelType,
+      amount: Math.round(Number(form.amount) * 100),
+      payeeType: form.payeeType,
+      payeeAccount: form.payeeAccount,
+      payeeName: form.payeeName,
+      remark: form.remark || undefined,
+    })
+    showCreateDialog.value = false
+    await loadData()
+  } finally {
+    submitting.value = false
+  }
 }
 
 // 详情
 const showDetail = ref(false)
 const detailItem = ref<TransferOrder | null>(null)
+
+async function openDetail(item: TransferOrder) {
+  try {
+    const detail = await getTransferOrderDetail(item.id)
+    detailItem.value = detail
+  } catch {
+    detailItem.value = item
+  }
+  showDetail.value = true
+}
 
 function transferStatusLabel(s: number) { return ['处理中', '转账成功', '转账失败'][s] || '未知' }
 function transferStatusClass(s: number) { return ['chip-amber', 'chip-green', 'chip-red'][s] || 'chip-grey' }
@@ -289,10 +318,12 @@ function payeeTypeLabel(t: string) {
   return map[t] || t
 }
 
-function handleSearch() { /* Mock */ }
-function handleReset() { searchForm.transferNo = ''; searchForm.merchantName = ''; searchForm.status = ''; searchForm.channelType = '' }
+function handleSearch() { loadData() }
+function handleReset() {
+  searchForm.transferNo = ''; searchForm.merchantName = ''; searchForm.status = ''; searchForm.channelType = ''
+  loadData()
+}
 function handleExport() { alert('导出功能开发中') }
-function openDetail(item: TransferOrder) { detailItem.value = item; showDetail.value = true }
 </script>
 
 <style scoped>

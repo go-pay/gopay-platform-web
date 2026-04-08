@@ -69,8 +69,8 @@
           </div>
         </div>
         <div class="dialog-footer">
-          <button class="btn btn-outlined" @click="showDialog = false">取消</button>
-          <button class="btn btn-primary" @click="handleSubmit">确定</button>
+          <button class="btn btn-outlined" @click="showDialog = false" :disabled="submitting">取消</button>
+          <button class="btn btn-primary" @click="handleSubmit" :disabled="submitting">{{ submitting ? '保存中...' : '确定' }}</button>
         </div>
       </v-card>
     </v-dialog>
@@ -83,7 +83,8 @@
           <v-btn icon variant="text" size="small" @click="showPermDialog = false"><v-icon>mdi-close</v-icon></v-btn>
         </div>
         <div class="dialog-body">
-          <div v-for="group in permGroups" :key="group.key" class="perm-group">
+          <div v-if="permLoading" class="perm-loading">加载中...</div>
+          <div v-else v-for="group in permGroups" :key="group.key" class="perm-group">
             <label class="perm-group-label">
               <input type="checkbox" :checked="isGroupChecked(group)" @change="toggleGroup(group)" />
               <span>{{ group.label }}</span>
@@ -97,8 +98,8 @@
           </div>
         </div>
         <div class="dialog-footer">
-          <button class="btn btn-outlined" @click="showPermDialog = false">取消</button>
-          <button class="btn btn-primary" @click="handleSavePerm">保存</button>
+          <button class="btn btn-outlined" @click="showPermDialog = false" :disabled="permSaving">取消</button>
+          <button class="btn btn-primary" @click="handleSavePerm" :disabled="permSaving || permLoading">{{ permSaving ? '保存中...' : '保存' }}</button>
         </div>
       </v-card>
     </v-dialog>
@@ -106,12 +107,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-
-interface RoleItem {
-  id: number; code: string; name: string; description: string
-  userCount: number; status: number; builtIn: boolean; perms: string[]; ctime: string
-}
+import { ref, reactive, onMounted } from 'vue'
+import { getRoleList, addRole, updateRole, toggleRoleStatus, updateRolePerms, getRolePerms, type RoleItem } from '@/api/system'
 
 interface PermGroup { key: string; label: string; items: { value: string; label: string }[] }
 
@@ -125,23 +122,30 @@ const permGroups: PermGroup[] = [
   { key: 'system', label: '系统管理', items: [{ value: 'system:user', label: '用户管理' }, { value: 'system:role', label: '角色管理' }, { value: 'system:log', label: '操作日志' }] },
 ]
 
-const allPerms = permGroups.flatMap(g => g.items.map(i => i.value))
+const roleList = ref<RoleItem[]>([])
 
-const roleList = ref<RoleItem[]>([
-  { id: 1, code: 'admin', name: '管理员', description: '拥有系统所有权限', userCount: 1, status: 1, builtIn: true, perms: [...allPerms], ctime: '2026-01-01 00:00:00' },
-  { id: 2, code: 'operator', name: '运营', description: '商户管理、进件管理、订单查看', userCount: 2, status: 1, builtIn: false, perms: ['merchant:list', 'merchant:app', 'merchant:edit', 'incoming:apply', 'incoming:record', 'incoming:review', 'order:payment', 'order:refund', 'order:transfer'], ctime: '2026-03-01 10:00:00' },
-  { id: 3, code: 'finance', name: '财务', description: '订单查看、交易流水、对账管理', userCount: 1, status: 1, builtIn: false, perms: ['order:payment', 'order:refund', 'order:transfer', 'transaction:flow', 'transaction:callback', 'recon:bill', 'recon:diff'], ctime: '2026-03-01 10:00:00' },
-  { id: 4, code: 'viewer', name: '只读', description: '仅查看所有数据，无编辑权限', userCount: 1, status: 1, builtIn: false, perms: ['merchant:list', 'merchant:app', 'incoming:record', 'order:payment', 'order:refund', 'order:transfer', 'transaction:flow', 'transaction:callback', 'recon:bill', 'recon:diff'], ctime: '2026-03-15 14:00:00' },
-])
+async function loadData() {
+  try {
+    const res = await getRoleList({ page: 1, pageSize: 100 })
+    roleList.value = res.list
+  } catch (e: any) {
+    alert(e.message || '加载角色列表失败')
+  }
+}
+
+onMounted(loadData)
 
 const showDialog = ref(false)
 const dialogMode = ref<'add' | 'edit'>('add')
 const editingId = ref<number | null>(null)
+const submitting = ref(false)
 const form = reactive({ code: '', name: '', description: '' })
 
 const showPermDialog = ref(false)
 const permItem = ref<RoleItem | null>(null)
 const permForm = ref<string[]>([])
+const permLoading = ref(false)
+const permSaving = ref(false)
 
 function openDialog(mode: 'add' | 'edit', item?: RoleItem) {
   dialogMode.value = mode; editingId.value = null
@@ -150,21 +154,61 @@ function openDialog(mode: 'add' | 'edit', item?: RoleItem) {
   showDialog.value = true
 }
 
-function handleSubmit() {
+async function handleSubmit() {
   if (!form.code || !form.name) return
-  if (dialogMode.value === 'add') {
-    const maxId = Math.max(...roleList.value.map(r => r.id), 0)
-    roleList.value.push({ id: maxId + 1, code: form.code, name: form.name, description: form.description, userCount: 0, status: 1, builtIn: false, perms: [], ctime: new Date().toISOString().replace('T', ' ').slice(0, 19) })
-  } else {
-    const idx = roleList.value.findIndex(r => r.id === editingId.value)
-    if (idx !== -1) Object.assign(roleList.value[idx], { name: form.name, description: form.description })
+  submitting.value = true
+  try {
+    if (dialogMode.value === 'add') {
+      await addRole({ code: form.code, name: form.name, description: form.description || undefined })
+    } else {
+      await updateRole({ id: editingId.value!, name: form.name, description: form.description || undefined })
+    }
+    showDialog.value = false
+    await loadData()
+  } catch (e: any) {
+    alert(e.message || '操作失败')
+  } finally {
+    submitting.value = false
   }
-  showDialog.value = false
 }
 
-function openPermDialog(item: RoleItem) { permItem.value = item; permForm.value = [...item.perms]; showPermDialog.value = true }
-function handleSavePerm() { if (permItem.value) { const r = roleList.value.find(r => r.id === permItem.value!.id); if (r) r.perms = [...permForm.value] }; showPermDialog.value = false }
-function handleToggle(item: RoleItem) { item.status = item.status === 1 ? 0 : 1 }
+async function openPermDialog(item: RoleItem) {
+  permItem.value = item
+  permForm.value = []
+  showPermDialog.value = true
+  permLoading.value = true
+  try {
+    permForm.value = await getRolePerms(item.id)
+  } catch (e: any) {
+    alert(e.message || '获取权限失败')
+  } finally {
+    permLoading.value = false
+  }
+}
+
+async function handleSavePerm() {
+  if (!permItem.value) return
+  permSaving.value = true
+  try {
+    await updateRolePerms(permItem.value.id, permForm.value)
+    showPermDialog.value = false
+    await loadData()
+  } catch (e: any) {
+    alert(e.message || '保存权限失败')
+  } finally {
+    permSaving.value = false
+  }
+}
+
+async function handleToggle(item: RoleItem) {
+  if (item.builtIn) { alert('内置角色不可停用'); return }
+  try {
+    await toggleRoleStatus(item.id)
+    await loadData()
+  } catch (e: any) {
+    alert(e.message || '操作失败')
+  }
+}
 
 function isGroupChecked(group: PermGroup) { return group.items.every(i => permForm.value.includes(i.value)) }
 function toggleGroup(group: PermGroup) {
@@ -219,4 +263,6 @@ function toggleGroup(group: PermGroup) {
 .perm-items { display: flex; gap: 16px; flex-wrap: wrap; padding-left: 24px; }
 .perm-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #475569; cursor: pointer; }
 .perm-item input { width: 15px; height: 15px; accent-color: #3B9EFF; cursor: pointer; }
+.perm-loading { font-size: 13px; color: #94A3B8; text-align: center; padding: 24px 0; }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>

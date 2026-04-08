@@ -64,11 +64,11 @@
                 <span :class="['chip', item.channelType === 'alipay' ? 'chip-blue' : 'chip-green']">{{ item.channelType === 'alipay' ? '支付宝' : '微信支付' }}</span>
               </td>
               <td>{{ item.platformCount }}</td>
-              <td>{{ item.platformAmount.toFixed(2) }}</td>
+              <td>{{ formatAmount(item.platformAmount) }}</td>
               <td>{{ item.channelCount }}</td>
-              <td>{{ item.channelAmount.toFixed(2) }}</td>
+              <td>{{ formatAmount(item.channelAmount) }}</td>
               <td :class="item.diffCount > 0 ? 'text-danger' : ''">{{ item.diffCount }}</td>
-              <td :class="item.diffAmount !== 0 ? 'text-danger' : ''">{{ item.diffAmount.toFixed(2) }}</td>
+              <td :class="item.diffAmount !== 0 ? 'text-danger' : ''">{{ formatAmount(item.diffAmount) }}</td>
               <td>
                 <span :class="['chip', billStatusClass(item.status)]">{{ billStatusLabel(item.status) }}</span>
               </td>
@@ -88,7 +88,7 @@
           </tbody>
         </table>
       </div>
-      <div class="table-footer">共 {{ billList.length }} 条</div>
+      <div class="table-footer">共 {{ total }} 条</div>
     </v-card>
 
     <!-- 详情弹窗 -->
@@ -113,7 +113,7 @@
             <div class="compare-table">
               <div class="compare-header"><span></span><span>平台</span><span>通道</span><span>差异</span></div>
               <div class="compare-row"><span>交易笔数</span><span>{{ detailItem.platformCount }}</span><span>{{ detailItem.channelCount }}</span><span :class="detailItem.diffCount > 0 ? 'text-danger' : ''">{{ detailItem.diffCount }}</span></div>
-              <div class="compare-row"><span>交易金额</span><span>¥{{ detailItem.platformAmount.toFixed(2) }}</span><span>¥{{ detailItem.channelAmount.toFixed(2) }}</span><span :class="detailItem.diffAmount !== 0 ? 'text-danger' : ''">¥{{ detailItem.diffAmount.toFixed(2) }}</span></div>
+              <div class="compare-row"><span>交易金额</span><span>¥{{ formatAmount(detailItem.platformAmount) }}</span><span>¥{{ formatAmount(detailItem.channelAmount) }}</span><span :class="detailItem.diffAmount !== 0 ? 'text-danger' : ''">¥{{ formatAmount(detailItem.diffAmount) }}</span></div>
             </div>
           </div>
         </div>
@@ -126,38 +126,66 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-
-interface BillItem {
-  id: number; billDate: string; channelType: 'alipay' | 'wechat'
-  platformCount: number; platformAmount: number; channelCount: number; channelAmount: number
-  diffCount: number; diffAmount: number; status: number; ctime: string
-}
+import { ref, reactive, onMounted } from 'vue'
+import { getBillList, generateBill, reconcileBill, getBillDetail, type BillItem } from '@/api/reconciliation'
 
 const searchForm = reactive({ date: '', channelType: '', status: '' })
 
-const billList = ref<BillItem[]>([
-  { id: 1, billDate: '2026-04-01', channelType: 'alipay', platformCount: 15, platformAmount: 8920.00, channelCount: 15, channelAmount: 8920.00, diffCount: 0, diffAmount: 0, status: 1, ctime: '2026-04-02 01:00:00' },
-  { id: 2, billDate: '2026-04-01', channelType: 'wechat', platformCount: 22, platformAmount: 12350.50, channelCount: 22, channelAmount: 12350.50, diffCount: 0, diffAmount: 0, status: 1, ctime: '2026-04-02 01:00:00' },
-  { id: 3, billDate: '2026-04-02', channelType: 'alipay', platformCount: 18, platformAmount: 9650.00, channelCount: 18, channelAmount: 9650.00, diffCount: 0, diffAmount: 0, status: 1, ctime: '2026-04-03 01:00:00' },
-  { id: 4, billDate: '2026-04-02', channelType: 'wechat', platformCount: 30, platformAmount: 18200.80, channelCount: 29, channelAmount: 18151.80, diffCount: 1, diffAmount: 49.00, status: 2, ctime: '2026-04-03 01:00:00' },
-  { id: 5, billDate: '2026-04-03', channelType: 'alipay', platformCount: 12, platformAmount: 6400.00, channelCount: 12, channelAmount: 6400.00, diffCount: 0, diffAmount: 0, status: 1, ctime: '2026-04-04 01:00:00' },
-  { id: 6, billDate: '2026-04-03', channelType: 'wechat', platformCount: 25, platformAmount: 15800.00, channelCount: 25, channelAmount: 15800.00, diffCount: 0, diffAmount: 0, status: 1, ctime: '2026-04-04 01:00:00' },
-  { id: 7, billDate: '2026-04-04', channelType: 'alipay', platformCount: 20, platformAmount: 11200.00, channelCount: 20, channelAmount: 11200.00, diffCount: 0, diffAmount: 0, status: 0, ctime: '2026-04-05 01:00:00' },
-  { id: 8, billDate: '2026-04-04', channelType: 'wechat', platformCount: 28, platformAmount: 16500.00, channelCount: 28, channelAmount: 16500.00, diffCount: 0, diffAmount: 0, status: 0, ctime: '2026-04-05 01:00:00' },
-])
+const billList = ref<BillItem[]>([])
+const total = ref(0)
+const loading = ref(false)
 
 const showDetail = ref(false)
 const detailItem = ref<BillItem | null>(null)
 
+function formatAmount(fen: number) {
+  const yuan = fen / 100
+  return yuan.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 function billStatusLabel(s: number) { return ['待对账', '已对账', '有差异'][s] || '未知' }
 function billStatusClass(s: number) { return ['chip-grey', 'chip-green', 'chip-red'][s] || 'chip-grey' }
-function handleSearch() {}
-function handleReset() { searchForm.date = ''; searchForm.channelType = ''; searchForm.status = '' }
-function handleGenerate() { alert('对账单生成任务已提交') }
-function handleReconcile(item: BillItem) { item.status = 1 }
+
+async function loadData() {
+  loading.value = true
+  try {
+    const params: Parameters<typeof getBillList>[0] = { page: 1, pageSize: 50 }
+    if (searchForm.date) params.date = searchForm.date
+    if (searchForm.channelType) params.channelType = searchForm.channelType
+    params.status = searchForm.status === '' ? -1 : Number(searchForm.status)
+    const res = await getBillList(params)
+    billList.value = res.list
+    total.value = res.total
+  } finally {
+    loading.value = false
+  }
+}
+
+function handleSearch() { loadData() }
+function handleReset() { searchForm.date = ''; searchForm.channelType = ''; searchForm.status = ''; loadData() }
+
+async function handleGenerate() {
+  const date = searchForm.date || new Date().toISOString().slice(0, 10)
+  const channelType = searchForm.channelType || 'alipay'
+  await generateBill({ date, channelType })
+  alert('对账单生成任务已提交')
+  loadData()
+}
+
+async function handleReconcile(item: BillItem) {
+  await reconcileBill(item.id)
+  loadData()
+}
+
 function handleDownload(_item: BillItem) { alert('下载功能开发中') }
-function openDetail(item: BillItem) { detailItem.value = item; showDetail.value = true }
+
+async function openDetail(item: BillItem) {
+  const detail = await getBillDetail(item.id)
+  detailItem.value = detail
+  showDetail.value = true
+}
+
+onMounted(() => { loadData() })
 </script>
 
 <style scoped>

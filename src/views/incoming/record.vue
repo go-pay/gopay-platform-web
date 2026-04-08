@@ -89,7 +89,7 @@
         </table>
       </div>
 
-      <div class="table-footer">共 {{ recordList.length }} 条</div>
+      <div class="table-footer">共 {{ total }} 条</div>
     </v-card>
 
     <!-- 详情弹窗 -->
@@ -139,45 +139,56 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-
-interface RecordItem {
-  id: number
-  applyNo: string
-  merchantName: string
-  channelType: 'alipay' | 'wechat'
-  merchantNo: string
-  licenseNo: string
-  legalPerson: string
-  phone: string
-  status: number // 2-已通过 3-已驳回
-  reviewer: string
-  reviewRemark: string
-  ctime: string
-  reviewTime: string
-}
+import { ref, reactive, onMounted } from 'vue'
+import { getRecordList, getRecordDetail, type RecordItem } from '@/api/incoming'
 
 const searchForm = reactive({ merchantName: '', channelType: '', status: '', reviewDate: '' })
 
-const recordList = ref<RecordItem[]>([
-  { id: 1, applyNo: 'INC20260401001', merchantName: '星辰科技有限公司', channelType: 'alipay', merchantNo: '2088441234567890', licenseNo: '91110108MA12345678', legalPerson: '张三', phone: '13800138001', status: 2, reviewer: '管理员', reviewRemark: '资料齐全，审核通过', ctime: '2026-04-01 10:00:00', reviewTime: '2026-04-01 14:30:00' },
-  { id: 2, applyNo: 'INC20260402001', merchantName: '星辰科技有限公司', channelType: 'wechat', merchantNo: '1600123456', licenseNo: '91110108MA12345678', legalPerson: '张三', phone: '13800138001', status: 2, reviewer: '管理员', reviewRemark: '审核通过', ctime: '2026-04-02 14:30:00', reviewTime: '2026-04-02 16:00:00' },
-  { id: 3, applyNo: 'INC20260320001', merchantName: '云海数字传媒', channelType: 'alipay', merchantNo: '2088557890123456', licenseNo: '91310115MA87654321', legalPerson: '李四', phone: '13800138002', status: 2, reviewer: '管理员', reviewRemark: '审核通过', ctime: '2026-03-20 09:15:00', reviewTime: '2026-03-20 11:00:00' },
-  { id: 4, applyNo: 'INC20260404001', merchantName: '极光电子商务', channelType: 'wechat', merchantNo: '', licenseNo: '91440300MA11112222', legalPerson: '王五', phone: '13800138003', status: 3, reviewer: '管理员', reviewRemark: '资料不完整，请补充营业执照副本', ctime: '2026-04-04 16:00:00', reviewTime: '2026-04-04 17:30:00' },
-  { id: 5, applyNo: 'INC20260325001', merchantName: '蓝鲸网络科技', channelType: 'alipay', merchantNo: '2088669012345678', licenseNo: '91330100MA33334444', legalPerson: '孙七', phone: '13800138005', status: 2, reviewer: '管理员', reviewRemark: '审核通过', ctime: '2026-03-25 11:30:00', reviewTime: '2026-03-25 15:00:00' },
-  { id: 6, applyNo: 'INC20260328001', merchantName: '九州在线商贸', channelType: 'wechat', merchantNo: '', licenseNo: '91510100MA55556666', legalPerson: '周八', phone: '13800138006', status: 3, reviewer: '管理员', reviewRemark: '法人信息与营业执照不一致', ctime: '2026-03-28 08:45:00', reviewTime: '2026-03-28 10:20:00' },
-])
+const recordList = ref<RecordItem[]>([])
+const total = ref(0)
+const loading = ref(false)
+
+async function loadData() {
+  loading.value = true
+  try {
+    const statusVal = searchForm.status === '' ? -1 : Number(searchForm.status)
+    const params: Parameters<typeof getRecordList>[0] = {
+      page: 1,
+      pageSize: 50,
+      status: statusVal,
+    }
+    if (searchForm.merchantName) params.merchantName = searchForm.merchantName
+    if (searchForm.channelType) params.channelType = searchForm.channelType
+    if (searchForm.reviewDate) params.reviewDate = searchForm.reviewDate
+    const res = await getRecordList(params)
+    recordList.value = res.list ?? []
+    total.value = res.total ?? 0
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => { loadData() })
+
+function handleSearch() { loadData() }
+function handleReset() {
+  searchForm.merchantName = ''
+  searchForm.channelType = ''
+  searchForm.status = ''
+  searchForm.reviewDate = ''
+  loadData()
+}
 
 const showDetail = ref(false)
 const detailItem = ref<RecordItem | null>(null)
 
-function handleSearch() { /* Mock */ }
-function handleReset() {
-  searchForm.merchantName = ''; searchForm.channelType = ''; searchForm.status = ''; searchForm.reviewDate = ''
-}
-
-function handleView(item: RecordItem) {
-  detailItem.value = item
+async function handleView(item: RecordItem) {
+  try {
+    const detail = await getRecordDetail(item.id)
+    detailItem.value = detail
+  } catch {
+    detailItem.value = item
+  }
   showDetail.value = true
 }
 </script>

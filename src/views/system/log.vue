@@ -86,7 +86,7 @@
           </tbody>
         </table>
       </div>
-      <div class="table-footer">共 {{ logList.length }} 条</div>
+      <div class="table-footer">共 {{ total }} 条</div>
     </v-card>
 
     <!-- 详情弹窗 -->
@@ -126,39 +126,88 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-
-interface LogItem {
-  id: number; operator: string; module: string; action: string; description: string
-  ip: string; userAgent: string; success: boolean; duration: number; requestData: string; ctime: string
-}
+import { ref, reactive, onMounted } from 'vue'
+import { getLogList, getLogDetail, exportLogs, type LogItem } from '@/api/system'
 
 const searchForm = reactive({ operator: '', module: '', action: '', date: '' })
 
-const logList = ref<LogItem[]>([
-  { id: 1, operator: 'admin', module: 'auth', action: 'login', description: '用户 admin 登录系统', ip: '192.168.1.100', userAgent: 'Chrome/120.0 (macOS)', success: true, duration: 120, requestData: '{"username":"admin"}', ctime: '2026-04-07 09:30:00' },
-  { id: 2, operator: 'admin', module: 'merchant', action: 'create', description: '新增商户：九州在线商贸', ip: '192.168.1.100', userAgent: 'Chrome/120.0 (macOS)', success: true, duration: 85, requestData: '{"name":"九州在线商贸","contact":"周八","phone":"13800138006"}', ctime: '2026-04-07 09:35:00' },
-  { id: 3, operator: 'zhangsan', module: 'incoming', action: 'create', description: '提交进件申请：蓝鲸网络科技-支付宝', ip: '10.0.0.55', userAgent: 'Chrome/120.0 (Windows)', success: true, duration: 150, requestData: '{"merchantId":5,"channelType":"alipay","licenseNo":"91330100MA33334444"}', ctime: '2026-04-07 10:00:00' },
-  { id: 4, operator: 'admin', module: 'incoming', action: 'update', description: '审核进件：云海数字传媒-支付宝，审核通过', ip: '192.168.1.100', userAgent: 'Chrome/120.0 (macOS)', success: true, duration: 65, requestData: '{"applyId":3,"result":"pass","remark":"资料齐全"}', ctime: '2026-04-07 10:15:00' },
-  { id: 5, operator: 'admin', module: 'payment', action: 'update', description: '更新通道参数配置：支付宝当面付', ip: '192.168.1.100', userAgent: 'Chrome/120.0 (macOS)', success: true, duration: 90, requestData: '{"channelId":1,"appId":"2026032200001234"}', ctime: '2026-04-07 10:30:00' },
-  { id: 6, operator: 'lisi', module: 'order', action: 'export', description: '导出支付订单列表，共 156 条', ip: '172.16.0.33', userAgent: 'Firefox/118.0 (Windows)', success: true, duration: 2300, requestData: '{"dateRange":["2026-04-01","2026-04-07"],"status":"1"}', ctime: '2026-04-07 11:00:00' },
-  { id: 7, operator: 'admin', module: 'system', action: 'update', description: '修改用户角色：wangwu → 运营', ip: '192.168.1.100', userAgent: 'Chrome/120.0 (macOS)', success: true, duration: 55, requestData: '{"userId":4,"role":"operator"}', ctime: '2026-04-07 11:20:00' },
-  { id: 8, operator: 'admin', module: 'system', action: 'update', description: '重置用户密码：wangwu', ip: '192.168.1.100', userAgent: 'Chrome/120.0 (macOS)', success: true, duration: 45, requestData: '{"userId":4}', ctime: '2026-04-07 11:22:00' },
-  { id: 9, operator: 'zhangsan', module: 'auth', action: 'login', description: '用户 zhangsan 登录失败，密码错误', ip: '10.0.0.55', userAgent: 'Chrome/120.0 (Windows)', success: false, duration: 80, requestData: '{"username":"zhangsan"}', ctime: '2026-04-07 14:00:00' },
-  { id: 10, operator: 'zhangsan', module: 'auth', action: 'login', description: '用户 zhangsan 登录系统', ip: '10.0.0.55', userAgent: 'Chrome/120.0 (Windows)', success: true, duration: 110, requestData: '{"username":"zhangsan"}', ctime: '2026-04-07 14:01:00' },
-])
+const logList = ref<LogItem[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
+const loading = ref(false)
 
 const showDetail = ref(false)
 const detailItem = ref<LogItem | null>(null)
+const detailLoading = ref(false)
 
-function moduleLabel(m: string) { return { auth: '登录认证', merchant: '商户管理', incoming: '进件管理', payment: '支付配置', order: '订单中心', system: '系统管理' }[m] || m }
-function actionLabel(a: string) { return { login: '登录', create: '新增', update: '修改', delete: '删除', export: '导出' }[a] || a }
-function actionClass(a: string) { return { login: 'chip-blue', create: 'chip-green', update: 'chip-amber', delete: 'chip-red', export: 'chip-purple' }[a] || 'chip-grey' }
+function moduleLabel(m: string) { return ({ auth: '登录认证', merchant: '商户管理', incoming: '进件管理', payment: '支付配置', order: '订单中心', system: '系统管理' } as Record<string, string>)[m] || m }
+function actionLabel(a: string) { return ({ login: '登录', create: '新增', update: '修改', delete: '删除', export: '导出' } as Record<string, string>)[a] || a }
+function actionClass(a: string) { return ({ login: 'chip-blue', create: 'chip-green', update: 'chip-amber', delete: 'chip-red', export: 'chip-purple' } as Record<string, string>)[a] || 'chip-grey' }
 
-function handleSearch() {}
-function handleReset() { searchForm.operator = ''; searchForm.module = ''; searchForm.action = ''; searchForm.date = '' }
-function handleExport() { alert('导出功能开发中') }
-function openDetail(item: LogItem) { detailItem.value = item; showDetail.value = true }
+async function loadData() {
+  loading.value = true
+  try {
+    const params: { page: number; pageSize: number; operator?: string; module?: string; action?: string; date?: string } = {
+      page: page.value,
+      pageSize: pageSize.value,
+    }
+    if (searchForm.operator) params.operator = searchForm.operator
+    if (searchForm.module) params.module = searchForm.module
+    if (searchForm.action) params.action = searchForm.action
+    if (searchForm.date) params.date = searchForm.date
+    const res = await getLogList(params)
+    logList.value = res.list
+    total.value = res.total
+  } catch (e) {
+    console.error('加载日志列表失败', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+function handleSearch() {
+  page.value = 1
+  loadData()
+}
+
+function handleReset() {
+  searchForm.operator = ''
+  searchForm.module = ''
+  searchForm.action = ''
+  searchForm.date = ''
+  page.value = 1
+  loadData()
+}
+
+async function handleExport() {
+  try {
+    const params: Record<string, any> = {}
+    if (searchForm.operator) params.operator = searchForm.operator
+    if (searchForm.module) params.module = searchForm.module
+    if (searchForm.action) params.action = searchForm.action
+    if (searchForm.date) params.date = searchForm.date
+    await exportLogs(params, 'operation-logs.csv')
+  } catch (e) {
+    console.error('导出失败', e)
+  }
+}
+
+async function openDetail(item: LogItem) {
+  showDetail.value = true
+  detailItem.value = item
+  detailLoading.value = true
+  try {
+    const full = await getLogDetail(item.id)
+    detailItem.value = full
+  } catch (e) {
+    console.error('加载日志详情失败', e)
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+onMounted(() => { loadData() })
 </script>
 
 <style scoped>

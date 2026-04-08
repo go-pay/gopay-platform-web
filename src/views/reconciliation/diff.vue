@@ -72,9 +72,9 @@
               <td>
                 <span :class="['chip', diffTypeClass(item.diffType)]">{{ diffTypeLabel(item.diffType) }}</span>
               </td>
-              <td>{{ item.platformAmount !== null ? item.platformAmount.toFixed(2) : '-' }}</td>
-              <td>{{ item.channelAmount !== null ? item.channelAmount.toFixed(2) : '-' }}</td>
-              <td class="text-danger">{{ item.diffAmount.toFixed(2) }}</td>
+              <td>{{ formatAmount(item.platformAmount) }}</td>
+              <td>{{ formatAmount(item.channelAmount) }}</td>
+              <td class="text-danger">{{ formatAmount(item.diffAmount) }}</td>
               <td>
                 <span :class="['chip', handleStatusClass(item.handleStatus)]">{{ handleStatusLabel(item.handleStatus) }}</span>
               </td>
@@ -91,7 +91,7 @@
           </tbody>
         </table>
       </div>
-      <div class="table-footer">共 {{ diffList.length }} 条</div>
+      <div class="table-footer">共 {{ total }} 条</div>
     </v-card>
 
     <!-- 详情弹窗 -->
@@ -109,9 +109,9 @@
               <div class="detail-item"><span class="detail-label">订单号</span><code class="code-text">{{ detailItem.orderNo }}</code></div>
               <div class="detail-item"><span class="detail-label">通道类型</span><span :class="['chip', detailItem.channelType === 'alipay' ? 'chip-blue' : 'chip-green']">{{ detailItem.channelType === 'alipay' ? '支付宝' : '微信支付' }}</span></div>
               <div class="detail-item"><span class="detail-label">差异类型</span><span :class="['chip', diffTypeClass(detailItem.diffType)]">{{ diffTypeLabel(detailItem.diffType) }}</span></div>
-              <div class="detail-item"><span class="detail-label">平台金额</span><span>{{ detailItem.platformAmount !== null ? '¥' + detailItem.platformAmount.toFixed(2) : '-' }}</span></div>
-              <div class="detail-item"><span class="detail-label">通道金额</span><span>{{ detailItem.channelAmount !== null ? '¥' + detailItem.channelAmount.toFixed(2) : '-' }}</span></div>
-              <div class="detail-item"><span class="detail-label">差异金额</span><span class="text-danger">¥{{ detailItem.diffAmount.toFixed(2) }}</span></div>
+              <div class="detail-item"><span class="detail-label">平台金额</span><span>{{ detailItem.platformAmount !== null ? '¥' + formatAmount(detailItem.platformAmount) : '-' }}</span></div>
+              <div class="detail-item"><span class="detail-label">通道金额</span><span>{{ detailItem.channelAmount !== null ? '¥' + formatAmount(detailItem.channelAmount) : '-' }}</span></div>
+              <div class="detail-item"><span class="detail-label">差异金额</span><span class="text-danger">¥{{ formatAmount(detailItem.diffAmount) }}</span></div>
               <div class="detail-item"><span class="detail-label">处理状态</span><span :class="['chip', handleStatusClass(detailItem.handleStatus)]">{{ handleStatusLabel(detailItem.handleStatus) }}</span></div>
               <div class="detail-item"><span class="detail-label">处理人</span><span>{{ detailItem.handler || '-' }}</span></div>
               <div class="detail-item"><span class="detail-label">处理备注</span><span>{{ detailItem.handleRemark || '-' }}</span></div>
@@ -133,7 +133,7 @@
           <div class="handle-info" v-if="handleItem">
             <div><span class="handle-label">订单号：</span>{{ handleItem.orderNo }}</div>
             <div><span class="handle-label">差异类型：</span>{{ diffTypeLabel(handleItem.diffType) }}</div>
-            <div><span class="handle-label">差异金额：</span><span class="text-danger">¥{{ handleItem.diffAmount.toFixed(2) }}</span></div>
+            <div><span class="handle-label">差异金额：</span><span class="text-danger">¥{{ formatAmount(handleItem.diffAmount) }}</span></div>
           </div>
           <div class="form-row">
             <label class="form-label">处理方式 <span class="required">*</span></label>
@@ -158,23 +158,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-
-interface DiffItem {
-  id: number; billDate: string; orderNo: string; channelType: 'alipay' | 'wechat'
-  diffType: string; platformAmount: number | null; channelAmount: number | null; diffAmount: number
-  handleStatus: number; handleRemark: string; handler: string
-}
+import { ref, reactive, onMounted } from 'vue'
+import { getDiffList, getDiffDetail, handleDiff, exportDiff, type DiffItem } from '@/api/reconciliation'
 
 const searchForm = reactive({ orderNo: '', diffType: '', handleStatus: '', date: '' })
 
-const diffList = ref<DiffItem[]>([
-  { id: 1, billDate: '2026-04-02', orderNo: 'PAY20260402100002', channelType: 'wechat', diffType: 'platform_only', platformAmount: 49.00, channelAmount: null, diffAmount: 49.00, handleStatus: 1, handleRemark: '用户支付失败，通道未记录，已确认', handler: 'admin' },
-  { id: 2, billDate: '2026-04-03', orderNo: 'PAY20260403100005', channelType: 'alipay', diffType: 'amount_mismatch', platformAmount: 199.00, channelAmount: 189.00, diffAmount: 10.00, handleStatus: 0, handleRemark: '', handler: '' },
-  { id: 3, billDate: '2026-04-03', orderNo: 'PAY20260403100008', channelType: 'wechat', diffType: 'channel_only', platformAmount: null, channelAmount: 88.00, diffAmount: 88.00, handleStatus: 0, handleRemark: '', handler: '' },
-  { id: 4, billDate: '2026-04-04', orderNo: 'PAY20260404100003', channelType: 'alipay', diffType: 'status_mismatch', platformAmount: 350.00, channelAmount: 350.00, diffAmount: 0, handleStatus: 2, handleRemark: '通道延迟到账，状态已同步', handler: 'admin' },
-  { id: 5, billDate: '2026-04-04', orderNo: 'PAY20260404100010', channelType: 'wechat', diffType: 'amount_mismatch', platformAmount: 520.00, channelAmount: 500.00, diffAmount: 20.00, handleStatus: 0, handleRemark: '', handler: '' },
-])
+const diffList = ref<DiffItem[]>([])
+const total = ref(0)
+const loading = ref(false)
 
 const showDetail = ref(false)
 const detailItem = ref<DiffItem | null>(null)
@@ -182,22 +173,61 @@ const showHandleDialog = ref(false)
 const handleItem = ref<DiffItem | null>(null)
 const handleForm = reactive({ action: '', remark: '' })
 
-function diffTypeLabel(t: string) { return { platform_only: '平台多单', channel_only: '通道多单', amount_mismatch: '金额不一致', status_mismatch: '状态不一致' }[t] || t }
-function diffTypeClass(t: string) { return { platform_only: 'chip-amber', channel_only: 'chip-purple', amount_mismatch: 'chip-red', status_mismatch: 'chip-teal' }[t] || 'chip-grey' }
+function formatAmount(fen: number | null) {
+  if (fen === null) return '-'
+  const yuan = fen / 100
+  return yuan.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function diffTypeLabel(t: string) { return ({ platform_only: '平台多单', channel_only: '通道多单', amount_mismatch: '金额不一致', status_mismatch: '状态不一致' } as Record<string, string>)[t] || t }
+function diffTypeClass(t: string) { return ({ platform_only: 'chip-amber', channel_only: 'chip-purple', amount_mismatch: 'chip-red', status_mismatch: 'chip-teal' } as Record<string, string>)[t] || 'chip-grey' }
 function handleStatusLabel(s: number) { return ['待处理', '已处理', '已忽略'][s] || '未知' }
 function handleStatusClass(s: number) { return ['chip-amber', 'chip-green', 'chip-grey'][s] || 'chip-grey' }
 
-function handleSearch() {}
-function handleReset() { searchForm.orderNo = ''; searchForm.diffType = ''; searchForm.handleStatus = ''; searchForm.date = '' }
-function handleExport() { alert('导出功能开发中') }
-function openDetail(item: DiffItem) { detailItem.value = item; showDetail.value = true }
-function openHandleDialog(item: DiffItem) { handleItem.value = item; handleForm.action = ''; handleForm.remark = ''; showHandleDialog.value = true }
-function handleConfirm() {
-  if (!handleForm.action || !handleItem.value) return
-  const item = diffList.value.find(d => d.id === handleItem.value!.id)
-  if (item) { item.handleStatus = handleForm.action === 'resolve' ? 1 : 2; item.handleRemark = handleForm.remark; item.handler = 'admin' }
-  showHandleDialog.value = false
+async function loadData() {
+  loading.value = true
+  try {
+    const params: Parameters<typeof getDiffList>[0] = { page: 1, pageSize: 50 }
+    if (searchForm.orderNo) params.orderNo = searchForm.orderNo
+    if (searchForm.diffType) params.diffType = searchForm.diffType
+    if (searchForm.date) params.billDate = searchForm.date
+    params.handleStatus = searchForm.handleStatus === '' ? -1 : Number(searchForm.handleStatus)
+    const res = await getDiffList(params)
+    diffList.value = res.list
+    total.value = res.total
+  } finally {
+    loading.value = false
+  }
 }
+
+function handleSearch() { loadData() }
+function handleReset() { searchForm.orderNo = ''; searchForm.diffType = ''; searchForm.handleStatus = ''; searchForm.date = ''; loadData() }
+
+async function handleExport() {
+  const params: Parameters<typeof getDiffList>[0] = { page: 1, pageSize: 10000 }
+  if (searchForm.orderNo) params.orderNo = searchForm.orderNo
+  if (searchForm.diffType) params.diffType = searchForm.diffType
+  if (searchForm.date) params.billDate = searchForm.date
+  params.handleStatus = searchForm.handleStatus === '' ? -1 : Number(searchForm.handleStatus)
+  await exportDiff(params, 'diff-records.csv')
+}
+
+async function openDetail(item: DiffItem) {
+  const detail = await getDiffDetail(item.id)
+  detailItem.value = detail
+  showDetail.value = true
+}
+
+function openHandleDialog(item: DiffItem) { handleItem.value = item; handleForm.action = ''; handleForm.remark = ''; showHandleDialog.value = true }
+
+async function handleConfirm() {
+  if (!handleForm.action || !handleItem.value) return
+  await handleDiff({ id: handleItem.value.id, action: handleForm.action as 'resolve' | 'ignore', remark: handleForm.remark })
+  showHandleDialog.value = false
+  loadData()
+}
+
+onMounted(() => { loadData() })
 </script>
 
 <style scoped>

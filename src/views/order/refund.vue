@@ -70,8 +70,8 @@
               <td><code class="code-text">{{ item.refundNo }}</code></td>
               <td><code class="code-text">{{ item.orderNo }}</code></td>
               <td>{{ item.merchantName }}</td>
-              <td class="font-medium refund-amount">-{{ item.refundAmount.toFixed(2) }}</td>
-              <td class="text-grey">{{ item.orderAmount.toFixed(2) }}</td>
+              <td class="font-medium refund-amount">-{{ formatAmount(item.refundAmount) }}</td>
+              <td class="text-grey">{{ formatAmount(item.orderAmount) }}</td>
               <td>
                 <span :class="['chip', item.channelType === 'alipay' ? 'chip-blue' : 'chip-green']">
                   {{ item.channelType === 'alipay' ? '支付宝' : '微信支付' }}
@@ -95,7 +95,7 @@
 
       <div class="table-footer">
         <span class="table-summary">总退款: <strong>¥{{ totalRefund }}</strong></span>
-        <span>共 {{ refundList.length }} 条</span>
+        <span>共 {{ total }} 条</span>
       </div>
     </v-card>
 
@@ -115,8 +115,8 @@
               <div class="detail-item"><span class="detail-label">退款单号</span><code class="code-text">{{ detailItem.refundNo }}</code></div>
               <div class="detail-item"><span class="detail-label">原支付单号</span><code class="code-text">{{ detailItem.orderNo }}</code></div>
               <div class="detail-item"><span class="detail-label">商户名称</span><span>{{ detailItem.merchantName }}</span></div>
-              <div class="detail-item"><span class="detail-label">退款金额</span><span class="refund-amount">¥{{ detailItem.refundAmount.toFixed(2) }}</span></div>
-              <div class="detail-item"><span class="detail-label">原订单金额</span><span>¥{{ detailItem.orderAmount.toFixed(2) }}</span></div>
+              <div class="detail-item"><span class="detail-label">退款金额</span><span class="refund-amount">¥{{ formatAmount(detailItem.refundAmount) }}</span></div>
+              <div class="detail-item"><span class="detail-label">原订单金额</span><span>¥{{ formatAmount(detailItem.orderAmount) }}</span></div>
               <div class="detail-item">
                 <span class="detail-label">退款状态</span>
                 <span :class="['chip', refundStatusClass(detailItem.status)]">{{ refundStatusLabel(detailItem.status) }}</span>
@@ -144,46 +144,80 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
-
-interface RefundOrder {
-  id: number
-  refundNo: string
-  orderNo: string
-  tradeRefundNo: string
-  merchantName: string
-  refundAmount: number
-  orderAmount: number
-  channelType: 'alipay' | 'wechat'
-  status: number // 0-退款中 1-退款成功 2-退款失败
-  reason: string
-  operator: string
-  ctime: string
-  finishTime: string
-}
+import { ref, reactive, computed, onMounted } from 'vue'
+import { getRefundOrderList, getRefundOrderDetail, type RefundOrder } from '@/api/order'
 
 const searchForm = reactive({ refundNo: '', orderNo: '', status: '', channelType: '' })
 
-const refundList = ref<RefundOrder[]>([
-  { id: 1, refundNo: 'REF20260402001', orderNo: 'PAY20260401100001', tradeRefundNo: '2026040200000001', merchantName: '星辰科技有限公司', refundAmount: 299.00, orderAmount: 299.00, channelType: 'alipay', status: 1, reason: '用户申请退款', operator: 'admin', ctime: '2026-04-02 10:00:00', finishTime: '2026-04-02 10:00:25' },
-  { id: 2, refundNo: 'REF20260403001', orderNo: 'PAY20260401100002', tradeRefundNo: '4200009999202604030000001', merchantName: '云海数字传媒', refundAmount: 30.00, orderAmount: 59.90, channelType: 'wechat', status: 1, reason: '部分退款-服务未使用', operator: 'admin', ctime: '2026-04-03 14:30:00', finishTime: '2026-04-03 14:30:45' },
-  { id: 3, refundNo: 'REF20260404001', orderNo: 'PAY20260403100001', tradeRefundNo: '', merchantName: '蓝鲸网络科技', refundAmount: 520.00, orderAmount: 520.00, channelType: 'alipay', status: 0, reason: '重复扣款', operator: 'admin', ctime: '2026-04-04 09:00:00', finishTime: '' },
-  { id: 4, refundNo: 'REF20260405001', orderNo: 'PAY20260405100001', tradeRefundNo: '', merchantName: '云海数字传媒', refundAmount: 168.00, orderAmount: 168.00, channelType: 'wechat', status: 2, reason: '超过退款期限', operator: 'admin', ctime: '2026-04-05 16:00:00', finishTime: '2026-04-05 16:01:00' },
-  { id: 5, refundNo: 'REF20260406001', orderNo: 'PAY20260406100001', tradeRefundNo: '2026040600000005', merchantName: '星辰科技有限公司', refundAmount: 88.00, orderAmount: 88.00, channelType: 'alipay', status: 1, reason: '用户取消订单', operator: 'admin', ctime: '2026-04-06 17:00:00', finishTime: '2026-04-06 17:00:30' },
-])
+const refundList = ref<RefundOrder[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
 
-const totalRefund = computed(() => refundList.value.filter(r => r.status === 1).reduce((s, r) => s + r.refundAmount, 0).toFixed(2))
+// 金额：分 → 元，格式 ¥ X,XXX.XX
+function formatAmount(fen: number): string {
+  return (fen / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// 成功退款总额（分 → 元）
+const totalRefund = computed(() =>
+  formatAmount(refundList.value.filter(r => r.status === 1).reduce((s, r) => s + r.refundAmount, 0))
+)
 
 const showDetail = ref(false)
 const detailItem = ref<RefundOrder | null>(null)
 
-function refundStatusLabel(s: number) { return ['退款中', '退款成功', '退款失败'][s] || '未知' }
-function refundStatusClass(s: number) { return ['chip-amber', 'chip-green', 'chip-red'][s] || 'chip-grey' }
+function refundStatusLabel(s: number) { return ['退款中', '退款成功', '退款失败'][s] ?? '未知' }
+function refundStatusClass(s: number) { return ['chip-amber', 'chip-green', 'chip-red'][s] ?? 'chip-grey' }
 
-function handleSearch() { /* Mock */ }
-function handleReset() { searchForm.refundNo = ''; searchForm.orderNo = ''; searchForm.status = ''; searchForm.channelType = '' }
+async function loadData() {
+  const params: Parameters<typeof getRefundOrderList>[0] = {
+    page: page.value,
+    pageSize: pageSize.value,
+  }
+  if (searchForm.refundNo) params.refundNo = searchForm.refundNo
+  if (searchForm.orderNo) params.orderNo = searchForm.orderNo
+  if (searchForm.status !== '') params.status = Number(searchForm.status)
+  if (searchForm.channelType) params.channelType = searchForm.channelType
+  // status 为空时传 -1 表示全部
+  if (params.status === undefined) params.status = -1
+
+  const res = await getRefundOrderList(params)
+  if (res) {
+    refundList.value = res.list ?? []
+    total.value = res.total ?? 0
+  }
+}
+
+function handleSearch() {
+  page.value = 1
+  loadData()
+}
+
+function handleReset() {
+  searchForm.refundNo = ''
+  searchForm.orderNo = ''
+  searchForm.status = ''
+  searchForm.channelType = ''
+  page.value = 1
+  loadData()
+}
+
 function handleExport() { alert('导出功能开发中') }
-function openDetail(item: RefundOrder) { detailItem.value = item; showDetail.value = true }
+
+async function openDetail(item: RefundOrder) {
+  const res = await getRefundOrderDetail(item.id)
+  if (res) {
+    detailItem.value = res
+  } else {
+    detailItem.value = item
+  }
+  showDetail.value = true
+}
+
+onMounted(() => {
+  loadData()
+})
 </script>
 
 <style scoped>

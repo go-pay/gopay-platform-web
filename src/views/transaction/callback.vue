@@ -108,7 +108,7 @@
         </table>
       </div>
 
-      <div class="table-footer">共 {{ callbackList.length }} 条</div>
+      <div class="table-footer">共 {{ total }} 条</div>
     </v-card>
 
     <!-- 详情弹窗 -->
@@ -170,54 +170,68 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-
-interface CallbackItem {
-  id: number
-  orderNo: string
-  type: 'pay' | 'refund' | 'transfer'
-  channelType: 'alipay' | 'wechat'
-  direction: 'upstream' | 'downstream'
-  notifyUrl: string
-  status: number // 0-失败 1-成功 2-待重试
-  httpStatus: number
-  retryCount: number
-  maxRetry: number
-  requestBody: string
-  responseBody: string
-  ctime: string
-}
+import { ref, reactive, onMounted } from 'vue'
+import { getCallbackList, getCallbackDetail, retryCallback } from '@/api/transaction'
+import type { CallbackItem } from '@/api/transaction'
 
 const searchForm = reactive({ orderNo: '', type: '', status: '', channelType: '' })
 
-const callbackList = ref<CallbackItem[]>([
-  { id: 1, orderNo: 'PAY20260401100001', type: 'pay', channelType: 'alipay', direction: 'upstream', notifyUrl: 'https://gopay.example.com/alipay/notify', status: 1, httpStatus: 200, retryCount: 0, maxRetry: 5, requestBody: '{"trade_no":"2026040122001401001234567","out_trade_no":"PAY20260401100001","trade_status":"TRADE_SUCCESS","total_amount":"299.00"}', responseBody: 'success', ctime: '2026-04-01 10:00:33' },
-  { id: 2, orderNo: 'PAY20260401100001', type: 'pay', channelType: 'alipay', direction: 'downstream', notifyUrl: 'https://api.xingchen.com/notify', status: 1, httpStatus: 200, retryCount: 0, maxRetry: 5, requestBody: '{"order_no":"PAY20260401100001","out_trade_no":"M20260401001","status":"SUCCESS","amount":299.00}', responseBody: '{"code":0,"msg":"ok"}', ctime: '2026-04-01 10:00:35' },
-  { id: 3, orderNo: 'PAY20260401100002', type: 'pay', channelType: 'wechat', direction: 'upstream', notifyUrl: 'https://gopay.example.com/wechat/notify', status: 1, httpStatus: 200, retryCount: 0, maxRetry: 5, requestBody: '{"transaction_id":"4200001234202604010012345","out_trade_no":"PAY20260401100002","trade_state":"SUCCESS","amount":{"total":5990}}', responseBody: '{"code":"SUCCESS"}', ctime: '2026-04-01 11:30:20' },
-  { id: 4, orderNo: 'PAY20260401100002', type: 'pay', channelType: 'wechat', direction: 'downstream', notifyUrl: 'https://api.yunhai.com/notify', status: 1, httpStatus: 200, retryCount: 0, maxRetry: 5, requestBody: '{"order_no":"PAY20260401100002","out_trade_no":"M20260401002","status":"SUCCESS","amount":59.90}', responseBody: '{"code":0,"msg":"ok"}', ctime: '2026-04-01 11:30:22' },
-  { id: 5, orderNo: 'REF20260402001', type: 'refund', channelType: 'alipay', direction: 'upstream', notifyUrl: 'https://gopay.example.com/alipay/refund-notify', status: 1, httpStatus: 200, retryCount: 0, maxRetry: 5, requestBody: '{"trade_no":"2026040122001401001234567","refund_fee":"299.00","gmt_refund":"2026-04-02 10:00:20"}', responseBody: 'success', ctime: '2026-04-02 10:00:23' },
-  { id: 6, orderNo: 'REF20260402001', type: 'refund', channelType: 'alipay', direction: 'downstream', notifyUrl: 'https://api.xingchen.com/refund-notify', status: 0, httpStatus: 500, retryCount: 3, maxRetry: 5, requestBody: '{"refund_no":"REF20260402001","order_no":"PAY20260401100001","status":"SUCCESS","refund_amount":299.00}', responseBody: 'Internal Server Error', ctime: '2026-04-02 10:00:25' },
-  { id: 7, orderNo: 'PAY20260403100001', type: 'pay', channelType: 'alipay', direction: 'downstream', notifyUrl: 'https://api.lanjing.com/pay/notify', status: 2, httpStatus: 0, retryCount: 1, maxRetry: 5, requestBody: '{"order_no":"PAY20260403100001","out_trade_no":"M20260403001","status":"SUCCESS","amount":520.00}', responseBody: '', ctime: '2026-04-03 08:45:20' },
-  { id: 8, orderNo: 'TRF20260401001', type: 'transfer', channelType: 'alipay', direction: 'downstream', notifyUrl: 'https://api.xingchen.com/transfer-notify', status: 1, httpStatus: 200, retryCount: 0, maxRetry: 5, requestBody: '{"transfer_no":"TRF20260401001","status":"SUCCESS","amount":5000.00,"payee_account":"zhangsan@163.com"}', responseBody: '{"code":0,"msg":"ok"}', ctime: '2026-04-01 10:00:32' },
-])
+const callbackList = ref<CallbackItem[]>([])
+const total = ref(0)
+const loading = ref(false)
 
 const showDetail = ref(false)
 const detailItem = ref<CallbackItem | null>(null)
 
-function notifyTypeLabel(t: string) { return { pay: '支付通知', refund: '退款通知', transfer: '转账通知' }[t] || t }
-function notifyTypeClass(t: string) { return { pay: 'chip-blue', refund: 'chip-red', transfer: 'chip-amber' }[t] || 'chip-grey' }
-function callbackStatusLabel(s: number) { return ['失败', '成功', '待重试'][s] || '未知' }
-function callbackStatusClass(s: number) { return ['chip-red', 'chip-green', 'chip-amber'][s] || 'chip-grey' }
+function notifyTypeLabel(t: string) { return ({ pay: '支付通知', refund: '退款通知', transfer: '转账通知' } as Record<string, string>)[t] || t }
+function notifyTypeClass(t: string) { return ({ pay: 'chip-blue', refund: 'chip-red', transfer: 'chip-amber' } as Record<string, string>)[t] || 'chip-grey' }
+function callbackStatusLabel(s: number) { return ['失败', '成功', '待重试'][s] ?? '未知' }
+function callbackStatusClass(s: number) { return ['chip-red', 'chip-green', 'chip-amber'][s] ?? 'chip-grey' }
 
-function handleSearch() { /* Mock */ }
-function handleReset() { searchForm.orderNo = ''; searchForm.type = ''; searchForm.status = ''; searchForm.channelType = '' }
-function openDetail(item: CallbackItem) { detailItem.value = item; showDetail.value = true }
+async function loadData() {
+  loading.value = true
+  try {
+    const statusVal = searchForm.status === '' ? -1 : Number(searchForm.status)
+    const res = await getCallbackList({
+      page: 1,
+      pageSize: 50,
+      orderNo: searchForm.orderNo || undefined,
+      type: searchForm.type || undefined,
+      status: statusVal,
+      channelType: searchForm.channelType || undefined,
+    })
+    callbackList.value = res.list ?? []
+    total.value = res.total ?? 0
+  } finally {
+    loading.value = false
+  }
+}
 
-function handleRetry(item: CallbackItem) {
-  item.retryCount++
-  item.status = 1
-  item.httpStatus = 200
-  item.responseBody = '{"code":0,"msg":"ok"}'
+onMounted(loadData)
+
+function handleSearch() { loadData() }
+function handleReset() {
+  searchForm.orderNo = ''
+  searchForm.type = ''
+  searchForm.status = ''
+  searchForm.channelType = ''
+  loadData()
+}
+
+async function openDetail(item: CallbackItem) {
+  showDetail.value = true
+  detailItem.value = item
+  try {
+    const full = await getCallbackDetail(item.id)
+    detailItem.value = full
+  } catch {
+    // 保留列表数据展示
+  }
+}
+
+async function handleRetry(item: CallbackItem) {
+  await retryCallback(item.id)
+  await loadData()
 }
 </script>
 

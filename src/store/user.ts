@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia'
+import { loginApi, getUserInfoApi } from '@/api/auth'
+import type { UserInfo } from '@/api/auth'
 
 interface UserState {
   token: string
-  userInfo: any
+  userInfo: UserInfo | null
 }
 
 export const useUserStore = defineStore('user', {
@@ -17,7 +19,7 @@ export const useUserStore = defineStore('user', {
       localStorage.setItem('token', token)
     },
 
-    setUserInfo(userInfo: any) {
+    setUserInfo(userInfo: UserInfo) {
       this.userInfo = userInfo
     },
 
@@ -28,35 +30,20 @@ export const useUserStore = defineStore('user', {
     },
 
     async login(username: string, password: string) {
-      const res = await fetch('/gopay/v1/sso/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      })
-      const data = await res.json()
-      if (data.code !== 0 && data.code !== 200) {
-        throw new Error(data.msg || data.message || '登录失败')
-      }
-      this.setToken(data.data.token)
-      this.setUserInfo(data.data.userInfo)
+      const data = await loginApi(username, password)
+      this.setToken(data.token)
+      this.setUserInfo(data.userInfo)
       return true
     },
 
     async fetchUserInfo() {
       if (!this.token) return
-      const res = await fetch('/gopay/v1/user/getInfo', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.token}`,
-        },
-      })
-      const data = await res.json()
-      if (data.code !== 0 && data.code !== 200) {
+      try {
+        const data = await getUserInfoApi()
+        this.setUserInfo(data)
+      } catch {
         this.logout()
-        return
       }
-      this.setUserInfo(data.data)
     }
   }
 })

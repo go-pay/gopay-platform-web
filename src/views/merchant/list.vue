@@ -85,7 +85,7 @@
       </div>
 
       <div class="table-footer">
-        <span>共 {{ merchants.length }} 条</span>
+        <span>共 {{ total }} 条</span>
       </div>
     </v-card>
 
@@ -130,7 +130,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { getMerchantList, addMerchant, updateMerchant, toggleMerchantStatus } from '@/api/merchant'
 
 interface Merchant {
   id: number
@@ -145,14 +146,11 @@ interface Merchant {
 
 const searchForm = reactive({ name: '', contact: '', status: '' })
 
-const merchants = ref<Merchant[]>([
-  { id: 1, name: '星辰科技有限公司', contact: '张三', phone: '13800138001', email: 'zhangsan@xingchen.com', status: 1, remark: '', ctime: '2026-03-15 10:30:00' },
-  { id: 2, name: '云海数字传媒', contact: '李四', phone: '13800138002', email: 'lisi@yunhai.com', status: 1, remark: '', ctime: '2026-03-18 14:20:00' },
-  { id: 3, name: '极光电子商务', contact: '王五', phone: '13800138003', email: 'wangwu@jiguang.com', status: 1, remark: '', ctime: '2026-03-22 09:15:00' },
-  { id: 4, name: '鼎盛支付服务', contact: '赵六', phone: '13800138004', email: 'zhaoliu@dingsheng.com', status: 0, remark: '暂停合作', ctime: '2026-03-25 16:45:00' },
-  { id: 5, name: '蓝鲸网络科技', contact: '孙七', phone: '13800138005', email: 'sunqi@lanjing.com', status: 1, remark: '', ctime: '2026-04-01 11:00:00' },
-  { id: 6, name: '九州在线商贸', contact: '周八', phone: '13800138006', email: 'zhouba@jiuzhou.com', status: 1, remark: '', ctime: '2026-04-05 08:30:00' },
-])
+const merchants = ref<Merchant[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
+const loading = ref(false)
 
 const showDialog = ref(false)
 const dialogMode = ref<'add' | 'edit'>('add')
@@ -165,8 +163,35 @@ function resetForm() {
   editingId.value = null
 }
 
-function handleSearch() { /* Mock: 前端过滤 */ }
-function handleReset() { searchForm.name = ''; searchForm.contact = ''; searchForm.status = '' }
+async function loadData() {
+  loading.value = true
+  try {
+    const statusParam = searchForm.status === '' ? -1 : Number(searchForm.status)
+    const res = await getMerchantList({
+      page: page.value,
+      pageSize: pageSize.value,
+      name: searchForm.name || undefined,
+      contact: searchForm.contact || undefined,
+      status: statusParam,
+    })
+    merchants.value = res.list
+    total.value = res.total
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => loadData())
+
+function handleSearch() {
+  page.value = 1
+  loadData()
+}
+
+function handleReset() {
+  searchForm.name = ''; searchForm.contact = ''; searchForm.status = ''
+  handleSearch()
+}
 
 function handleEdit(item: Merchant) {
   dialogMode.value = 'edit'
@@ -175,26 +200,20 @@ function handleEdit(item: Merchant) {
   showDialog.value = true
 }
 
-function handleSubmit() {
+async function handleSubmit() {
   if (!form.name || !form.contact) return
   if (dialogMode.value === 'add') {
-    const maxId = Math.max(...merchants.value.map(m => m.id), 0)
-    merchants.value.unshift({
-      id: maxId + 1, name: form.name, contact: form.contact, phone: form.phone,
-      email: form.email, status: 1, remark: form.remark,
-      ctime: new Date().toISOString().replace('T', ' ').slice(0, 19),
-    })
+    await addMerchant({ name: form.name, contact: form.contact, phone: form.phone, email: form.email, remark: form.remark })
   } else {
-    const idx = merchants.value.findIndex(m => m.id === editingId.value)
-    if (idx !== -1) {
-      Object.assign(merchants.value[idx], { name: form.name, contact: form.contact, phone: form.phone, email: form.email, remark: form.remark })
-    }
+    await updateMerchant({ id: editingId.value!, name: form.name, contact: form.contact, phone: form.phone, email: form.email, remark: form.remark })
   }
   showDialog.value = false
+  loadData()
 }
 
-function handleToggleStatus(item: Merchant) {
-  item.status = item.status === 1 ? 0 : 1
+async function handleToggleStatus(item: Merchant) {
+  await toggleMerchantStatus(item.id)
+  loadData()
 }
 </script>
 

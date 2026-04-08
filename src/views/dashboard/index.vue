@@ -133,7 +133,7 @@
         </table>
       </div>
 
-      <div class="order-footer">共 1,234 条</div>
+      <div class="order-footer">共 {{ orderTotal.toLocaleString() }} 条</div>
     </v-card>
   </div>
 </template>
@@ -142,19 +142,20 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
 import dayjs from 'dayjs'
+import { getDashboardStats, getRecentOrders, getChannelDistribution, getTrend } from '@/api/dashboard'
 
 const today = dayjs().format('YYYY-MM-DD dddd')
 
-const statCards = [
-  { label: '今日交易额', value: '¥ 128,456.00', icon: 'mdi-cash-multiple', gradient: 'bg-gradient-primary' },
-  { label: '今日交易笔数', value: '1,234', icon: 'mdi-receipt-text-outline', gradient: 'bg-gradient-success' },
-  { label: '今日成功率', value: '98.6%', icon: 'mdi-check-circle-outline', gradient: 'bg-gradient-warning' },
-]
+const statCards = ref([
+  { label: '今日交易额', value: '--', icon: 'mdi-cash-multiple', gradient: 'bg-gradient-primary' },
+  { label: '今日交易笔数', value: '--', icon: 'mdi-receipt-text-outline', gradient: 'bg-gradient-success' },
+  { label: '今日成功率', value: '--', icon: 'mdi-check-circle-outline', gradient: 'bg-gradient-warning' },
+])
 
-const quickEntries = [
-  { label: '待审核进件', value: 3, icon: 'mdi-file-clock', bgColor: '#FFF7ED', iconColor: '#F59E0B', path: '/incoming/apply' },
-  { label: '待处理退款', value: 5, icon: 'mdi-cash-refund', bgColor: '#FEF2F2', iconColor: '#EF4444', path: '/order/refund' },
-]
+const quickEntries = ref([
+  { label: '待审核进件', value: 0, icon: 'mdi-file-clock', bgColor: '#FFF7ED', iconColor: '#F59E0B', path: '/incoming/apply' },
+  { label: '待处理退款', value: 0, icon: 'mdi-cash-refund', bgColor: '#FEF2F2', iconColor: '#EF4444', path: '/order/refund' },
+])
 
 const orderSearch = ref('')
 const channelFilter = ref('全部通道')
@@ -162,22 +163,42 @@ const statusFilter = ref('全部状态')
 const channelOptions = ['全部通道', '支付宝', '微信支付']
 const statusOptions = ['全部状态', '已支付', '待支付', '已关闭']
 
-const recentOrders = [
-  { id: 'PAY20260407001234', merchant: '星辰科技有限公司', amount: '¥ 2,580.00', channel: '支付宝', status: '已支付', chipClass: 'green', time: '2026-04-07 14:23:15' },
-  { id: 'PAY20260407001233', merchant: '云海数字传媒', amount: '¥ 199.00', channel: '微信', status: '已支付', chipClass: 'green', time: '2026-04-07 14:20:08' },
-  { id: 'PAY20260407001232', merchant: '极光电子商务', amount: '¥ 15,800.00', channel: '支付宝', status: '待支付', chipClass: 'amber', time: '2026-04-07 14:18:30' },
-  { id: 'PAY20260407001231', merchant: '星辰科技有限公司', amount: '¥ 450.50', channel: '微信', status: '已关闭', chipClass: 'grey', time: '2026-04-07 14:10:22' },
-  { id: 'PAY20260407001230', merchant: '鼎盛支付服务', amount: '¥ 8,900.00', channel: '支付宝', status: '已支付', chipClass: 'green', time: '2026-04-07 14:05:11' },
-]
+const statusMap: Record<number, { label: string; chipClass: string }> = {
+  0: { label: '待支付', chipClass: 'amber' },
+  1: { label: '已支付', chipClass: 'green' },
+  2: { label: '支付失败', chipClass: 'red' },
+  3: { label: '已关闭', chipClass: 'grey' },
+}
+
+const channelMap: Record<string, string> = {
+  alipay: '支付宝',
+  wechat: '微信',
+}
+
+const recentOrders = ref<Array<{
+  id: string
+  merchant: string
+  amount: string
+  channel: string
+  status: string
+  chipClass: string
+  time: string
+}>>([])
+
+const orderTotal = ref(0)
 
 const donutChartRef = ref<HTMLElement>()
 const areaChartRef = ref<HTMLElement>()
 let donutChart: echarts.ECharts | null = null
 let areaChart: echarts.ECharts | null = null
 
-function initDonutChart() {
+function initDonutChart(alipay = 0, wechat = 0) {
   if (!donutChartRef.value) return
   donutChart = echarts.init(donutChartRef.value)
+  const totalYuan = ((alipay + wechat) / 100)
+  const totalLabel = totalYuan >= 10000
+    ? `¥${(totalYuan / 10000).toFixed(1)}万`
+    : `¥${totalYuan.toFixed(0)}`
   donutChart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
     legend: { bottom: 0, itemGap: 24 },
@@ -186,17 +207,19 @@ function initDonutChart() {
       type: 'pie', radius: ['50%', '75%'], center: ['50%', '45%'],
       avoidLabelOverlap: false,
       itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 3 },
-      label: { show: true, position: 'center', formatter: '¥128K\n总交易额', fontSize: 16, fontWeight: 'bold', lineHeight: 24, color: '#1E293B' },
+      label: { show: true, position: 'center', formatter: `${totalLabel}\n总交易额`, fontSize: 16, fontWeight: 'bold', lineHeight: 24, color: '#1E293B' },
       emphasis: { label: { show: true, fontSize: 18, fontWeight: 'bold' } },
-      data: [{ value: 83496, name: '支付宝' }, { value: 44960, name: '微信支付' }],
+      data: [
+        { value: +(alipay / 100).toFixed(2), name: '支付宝' },
+        { value: +(wechat / 100).toFixed(2), name: '微信支付' },
+      ],
     }],
   })
 }
 
-function initAreaChart() {
+function initAreaChart(dates: string[] = [], amounts: number[] = [], counts: number[] = []) {
   if (!areaChartRef.value) return
   areaChart = echarts.init(areaChartRef.value)
-  const dates = Array.from({ length: 7 }, (_, i) => dayjs().subtract(6 - i, 'day').format('MM-DD'))
   areaChart.setOption({
     tooltip: { trigger: 'axis' },
     legend: { bottom: 0, itemGap: 24 },
@@ -205,9 +228,9 @@ function initAreaChart() {
     yAxis: { type: 'value', splitLine: { lineStyle: { color: '#F1F5F9' } } },
     color: ['#3B9EFF', '#10B981'],
     series: [
-      { name: '交易额(万)', type: 'line', smooth: true, data: [8.2, 9.5, 11.3, 10.8, 12.5, 13.1, 12.8],
+      { name: '交易额(万)', type: 'line', smooth: true, data: amounts,
         areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(59,158,255,0.25)' }, { offset: 1, color: 'rgba(59,158,255,0.02)' }]) } },
-      { name: '交易笔数(百)', type: 'line', smooth: true, data: [6.8, 7.2, 9.1, 8.5, 10.3, 11.2, 12.3],
+      { name: '交易笔数(百)', type: 'line', smooth: true, data: counts,
         areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(16,185,129,0.2)' }, { offset: 1, color: 'rgba(16,185,129,0.02)' }]) } },
     ],
   })
@@ -215,7 +238,73 @@ function initAreaChart() {
 
 function handleResize() { donutChart?.resize(); areaChart?.resize() }
 
-onMounted(() => { initDonutChart(); initAreaChart(); window.addEventListener('resize', handleResize) })
+async function loadDashboardStats() {
+  try {
+    const res = await getDashboardStats()
+    const data = res.data
+    statCards.value[0].value = '¥ ' + (data.todayAmount / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
+    statCards.value[1].value = data.todayCount.toLocaleString('zh-CN')
+    statCards.value[2].value = data.todaySuccessRate + '%'
+    quickEntries.value[0].value = data.pendingApply
+    quickEntries.value[1].value = data.pendingRefund
+  } catch (e) {
+    // 保持默认值 '--'
+  }
+}
+
+async function loadRecentOrders() {
+  try {
+    const res = await getRecentOrders({ page: 1, pageSize: 5 })
+    const data = res.data
+    orderTotal.value = data.total
+    recentOrders.value = data.list.map(o => {
+      const s = statusMap[o.status] ?? { label: '未知', chipClass: 'grey' }
+      return {
+        id: o.orderNo,
+        merchant: o.merchantName,
+        amount: '¥ ' + (o.amount / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2 }),
+        channel: channelMap[o.channelType] ?? o.channelType,
+        status: s.label,
+        chipClass: s.chipClass,
+        time: o.ctime,
+      }
+    })
+  } catch (e) {
+    recentOrders.value = []
+  }
+}
+
+async function loadChannelDistribution() {
+  try {
+    const res = await getChannelDistribution()
+    const { alipay, wechat } = res.data
+    initDonutChart(alipay, wechat)
+  } catch (e) {
+    initDonutChart()
+  }
+}
+
+async function loadTrend() {
+  try {
+    const res = await getTrend()
+    const { dates, amounts, counts } = res.data
+    const amountsWan = amounts.map(v => +(v / 1000000).toFixed(2))
+    const countsBai = counts.map(v => +(v / 100).toFixed(2))
+    initAreaChart(dates, amountsWan, countsBai)
+  } catch (e) {
+    initAreaChart()
+  }
+}
+
+onMounted(async () => {
+  window.addEventListener('resize', handleResize)
+  await Promise.all([
+    loadDashboardStats(),
+    loadRecentOrders(),
+    loadChannelDistribution(),
+    loadTrend(),
+  ])
+})
 onUnmounted(() => { window.removeEventListener('resize', handleResize); donutChart?.dispose(); areaChart?.dispose() })
 </script>
 
