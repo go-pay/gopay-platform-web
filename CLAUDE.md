@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 开发前必读
+
+**重要**: 在开始任何开发工作前，请先查看 `docs/CHANGELOG.md` 了解最近的改动和开发历史，避免重复工作或引入冲突。
+
 ## 项目概述
 
 GoPay 支付网关管理平台前端项目，基于 Vue 3 + TypeScript + Vite + Vuetify 3 构建。
