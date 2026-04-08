@@ -28,11 +28,35 @@ export const useUserStore = defineStore('user', {
     },
 
     async login(username: string, password: string) {
-      // Mock 登录
-      const mockToken = 'mock-token-' + Date.now()
-      this.setToken(mockToken)
-      this.setUserInfo({ username, role: 'admin' })
+      const res = await fetch('/gopay/v1/sso/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      })
+      const data = await res.json()
+      if (data.code !== 0 && data.code !== 200) {
+        throw new Error(data.msg || data.message || '登录失败')
+      }
+      this.setToken(data.data.token)
+      this.setUserInfo(data.data.userInfo)
       return true
+    },
+
+    async fetchUserInfo() {
+      if (!this.token) return
+      const res = await fetch('/gopay/v1/user/getInfo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`,
+        },
+      })
+      const data = await res.json()
+      if (data.code !== 0 && data.code !== 200) {
+        this.logout()
+        return
+      }
+      this.setUserInfo(data.data)
     }
   }
 })
