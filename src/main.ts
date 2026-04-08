@@ -1,14 +1,13 @@
 import { createApp } from 'vue'
-import Antd from 'ant-design-vue'
-import 'ant-design-vue/dist/reset.css'
-import './style.css'
+import vuetify from './plugins/vuetify'
+import './styles/global.css'
 import App from './App.vue'
 import router from './router'
 import pinia from './store'
 
 const app = createApp(App)
 
-app.use(Antd)
+app.use(vuetify)
 app.use(router)
 app.use(pinia)
 

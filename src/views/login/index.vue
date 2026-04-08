@@ -1,63 +1,59 @@
 <template>
   <div class="login-container">
-    <div class="login-box">
-      <div class="login-header">
-        <h1>GoPay 支付平台</h1>
-        <p>运营管理系统</p>
+    <v-card class="login-card" elevation="12" rounded="xl">
+      <div class="card-header">
+        <div class="logo-icon mx-auto mb-4">G</div>
+        <h1 class="text-h5 font-weight-bold text-white">GoPay</h1>
+        <p class="text-body-2 mt-1" style="color: rgba(255,255,255,0.8)">支付网关管理平台</p>
       </div>
-      <a-form
-        :model="formState"
-        @finish="handleLogin"
-        class="login-form"
-      >
-        <a-form-item
-          name="username"
-          :rules="[{ required: true, message: '请输入账号' }]"
-        >
-          <a-input
-            v-model:value="formState.username"
-            size="large"
-            placeholder="账号/手机号/邮箱"
-          >
-            <template #prefix>
-              <UserOutlined />
-            </template>
-          </a-input>
-        </a-form-item>
 
-        <a-form-item
-          name="password"
-          :rules="[{ required: true, message: '请输入密码' }]"
-        >
-          <a-input-password
-            v-model:value="formState.password"
-            size="large"
-            placeholder="密码"
-          >
-            <template #prefix>
-              <LockOutlined />
-            </template>
-          </a-input-password>
-        </a-form-item>
+      <div class="card-body">
+        <v-form @submit.prevent="handleLogin">
+          <v-text-field
+            v-model="form.username"
+            prepend-inner-icon="mdi-account"
+            label="账号"
+            placeholder="请输入账号"
+            :rules="[rules.required]"
+            class="mb-1"
+          />
 
-        <a-form-item>
-          <a-checkbox v-model:checked="formState.remember">
-            记住我
-          </a-checkbox>
-        </a-form-item>
+          <v-text-field
+            v-model="form.password"
+            :type="showPassword ? 'text' : 'password'"
+            prepend-inner-icon="mdi-lock"
+            :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
+            label="密码"
+            placeholder="请输入密码"
+            :rules="[rules.required]"
+            class="mb-1"
+            @click:append-inner="showPassword = !showPassword"
+          />
 
-        <a-form-item>
-          <a-button
-            type="primary"
-            html-type="submit"
-            size="large"
+          <v-checkbox
+            v-model="form.remember"
+            label="记住我"
+            density="compact"
+            color="primary"
+            class="mb-4"
+          />
+
+          <v-btn
+            type="submit"
             block
+            size="large"
             :loading="loading"
+            class="btn-gradient-primary text-none"
+            style="font-size: 16px; letter-spacing: 0"
           >
-            登录
-          </a-button>
-        </a-form-item>
-      </a-form>
+            登 录
+          </v-btn>
+        </v-form>
+      </div>
+    </v-card>
+
+    <div class="copyright">
+      &copy; 2026 GoPay. All rights reserved.
     </div>
   </div>
 </template>
@@ -65,28 +61,31 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
-import { UserOutlined, LockOutlined } from '@ant-design/icons-vue'
 import { useUserStore } from '@/store/user'
 
 const router = useRouter()
 const userStore = useUserStore()
 const loading = ref(false)
+const showPassword = ref(false)
 
-const formState = reactive({
+const form = reactive({
   username: 'admin',
   password: 'admin',
-  remember: true
+  remember: true,
 })
 
-const handleLogin = async () => {
+const rules = {
+  required: (v: string) => !!v || '此项为必填',
+}
+
+async function handleLogin() {
+  if (!form.username || !form.password) return
   loading.value = true
   try {
-    await userStore.login(formState.username, formState.password)
-    message.success('登录成功')
+    await userStore.login(form.username, form.password)
     router.push('/dashboard')
-  } catch (error) {
-    message.error('登录失败')
+  } catch {
+    // TODO: snackbar error
   } finally {
     loading.value = false
   }
@@ -98,37 +97,43 @@ const handleLogin = async () => {
   width: 100%;
   height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #F5F7FA;
 }
 
-.login-box {
-  width: 400px;
-  padding: 40px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+.login-card {
+  width: 420px;
+  overflow: hidden;
 }
 
-.login-header {
+.card-header {
+  background: linear-gradient(135deg, #3B9EFF 0%, #7BBFFF 100%);
+  padding: 40px 40px 32px;
   text-align: center;
-  margin-bottom: 30px;
 }
 
-.login-header h1 {
+.card-body {
+  padding: 32px 40px 40px;
+}
+
+.logo-icon {
+  width: 56px;
+  height: 56px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 28px;
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 8px;
+  font-weight: 700;
+  color: #fff;
 }
 
-.login-header p {
-  font-size: 14px;
-  color: #666;
-}
-
-.login-form {
-  margin-top: 20px;
+.copyright {
+  margin-top: 32px;
+  color: #94A3B8;
+  font-size: 13px;
 }
 </style>
