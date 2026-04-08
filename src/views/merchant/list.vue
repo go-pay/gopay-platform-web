@@ -48,7 +48,7 @@
               <th style="width: 120px">联系人</th>
               <th style="width: 140px">联系电话</th>
               <th>邮箱</th>
-              <th style="width: 90px">状态</th>
+              <th style="width: 80px">状态</th>
               <th style="width: 160px">创建时间</th>
               <th style="width: 120px">操作</th>
             </tr>
@@ -231,7 +231,7 @@ function handleToggleStatus(item: Merchant) {
 /* 数据表格 */
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th { font-weight: 600; color: #64748B; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; background: #FAFBFC; padding: 12px 16px; text-align: left; border-bottom: 1px solid #F1F5F9; white-space: nowrap; }
-.data-table td { font-size: 13px; padding: 14px 16px; border-bottom: 1px solid #F8FAFC; color: #334155; vertical-align: middle; }
+.data-table td { font-size: 13px; padding: 14px 16px; border-bottom: 1px solid #F8FAFC; color: #334155; vertical-align: middle; white-space: nowrap; }
 .data-table tbody tr:hover { background: #F8FAFC; }
 .font-medium { font-weight: 500; }
 .text-grey { color: #94A3B8; }

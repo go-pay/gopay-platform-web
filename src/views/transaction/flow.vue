@@ -83,13 +83,13 @@
             <tr>
               <th style="width: 160px">流水号</th>
               <th style="width: 160px">关联订单号</th>
-              <th style="width: 90px">交易类型</th>
+              <th style="width: 80px">交易类型</th>
               <th style="width: 120px">商户名称</th>
               <th style="width: 110px">交易金额(元)</th>
-              <th style="width: 100px">通道类型</th>
+              <th style="width: 120px">通道类型</th>
               <th style="width: 140px">通道流水号</th>
               <th style="width: 80px">方向</th>
-              <th style="width: 90px">状态</th>
+              <th style="width: 95px">状态</th>
               <th style="width: 160px">交易时间</th>
               <th style="width: 80px">操作</th>
             </tr>
@@ -278,7 +278,7 @@ function openDetail(item: FlowItem) { detailItem.value = item; showDetail.value 
 .table-footer { display: flex; align-items: center; justify-content: flex-end; padding: 12px 24px; color: #94A3B8; font-size: 13px; border-top: 1px solid #F1F5F9; }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th { font-weight: 600; color: #64748B; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; background: #FAFBFC; padding: 12px 16px; text-align: left; border-bottom: 1px solid #F1F5F9; white-space: nowrap; }
-.data-table td { font-size: 13px; padding: 14px 16px; border-bottom: 1px solid #F8FAFC; color: #334155; vertical-align: middle; }
+.data-table td { font-size: 13px; padding: 14px 16px; border-bottom: 1px solid #F8FAFC; color: #334155; vertical-align: middle; white-space: nowrap; }
 .data-table tbody tr:hover { background: #F8FAFC; }
 .font-medium { font-weight: 500; }
 .text-grey { color: #94A3B8; }

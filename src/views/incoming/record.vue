@@ -52,7 +52,7 @@
               <th style="width: 160px">商户名称</th>
               <th style="width: 120px">通道类型</th>
               <th style="width: 140px">商户号</th>
-              <th style="width: 100px">进件状态</th>
+              <th style="width: 95px">进件状态</th>
               <th style="width: 120px">审核人</th>
               <th>审核意见</th>
               <th style="width: 160px">申请时间</th>
@@ -207,7 +207,7 @@ function handleView(item: RecordItem) {
 .table-footer { display: flex; align-items: center; justify-content: flex-end; padding: 12px 24px; color: #94A3B8; font-size: 13px; border-top: 1px solid #F1F5F9; }
 .data-table { width: 100%; border-collapse: collapse; }
 .data-table th { font-weight: 600; color: #64748B; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; background: #FAFBFC; padding: 12px 16px; text-align: left; border-bottom: 1px solid #F1F5F9; white-space: nowrap; }
-.data-table td { font-size: 13px; padding: 14px 16px; border-bottom: 1px solid #F8FAFC; color: #334155; vertical-align: middle; }
+.data-table td { font-size: 13px; padding: 14px 16px; border-bottom: 1px solid #F8FAFC; color: #334155; vertical-align: middle; white-space: nowrap; }
 .data-table tbody tr:hover { background: #F8FAFC; }
 .font-medium { font-weight: 500; }
 .text-grey { color: #94A3B8; }
