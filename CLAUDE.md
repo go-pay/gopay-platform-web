@@ -207,12 +207,12 @@ v-dialog (详情/编辑弹窗)
 
 ## 关联后端项目
 
-本项目的后端服务为 **gopay-platform**，位于 `/Users/my40138ml/workspace/jerry/go-pay/gopay-platform`。
+本项目的后端服务为 **gopay-platform**。
 
 - **技术栈**: Go 1.22 + Gin + GORM (MySQL) + Redis
 - **开发端口**: 后端 localhost:2233，前端 localhost:3000
 - **API 前缀**: `/gopay/v1/`，前端通过 Vite proxy 转发请求到后端
-- **数据库**: MySQL `gopay`，DDL 在后端 `mysql_ddl.sql`，主要表：account、company、payment_cfg、app、payment_order
+- **数据库**: MySQL `gopay`，主要表：account、company、payment_cfg、app、payment_order
 - **后端已实现**: 支付宝支付（QR码 + 页面支付）、健康检查
 - **后端待实现**: SSO 登录、用户管理、订单管理、支付配置 CRUD、微信支付
 
