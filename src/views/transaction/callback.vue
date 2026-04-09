@@ -94,7 +94,7 @@
                   {{ item.httpStatus || '-' }}
                 </code>
               </td>
-              <td class="text-grey">{{ item.ctime }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.ctime) }}</td>
               <td>
                 <v-btn icon variant="text" size="x-small" title="查看详情" @click="openDetail(item)">
                   <v-icon size="18" color="#64748B">mdi-eye-outline</v-icon>
@@ -142,7 +142,7 @@
               <div class="detail-item"><span class="detail-label">通知方向</span><span>{{ detailItem.direction === 'upstream' ? '上游→平台' : '平台→商户' }}</span></div>
               <div class="detail-item"><span class="detail-label">HTTP 状态码</span><code class="code-text">{{ detailItem.httpStatus || '-' }}</code></div>
               <div class="detail-item"><span class="detail-label">重试次数</span><span>{{ detailItem.retryCount }} / {{ detailItem.maxRetry }}</span></div>
-              <div class="detail-item"><span class="detail-label">通知时间</span><span>{{ detailItem.ctime }}</span></div>
+              <div class="detail-item"><span class="detail-label">通知时间</span><span>{{ formatTimestamp(detailItem.ctime) }}</span></div>
             </div>
           </div>
           <div class="detail-section">
@@ -173,6 +173,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { getCallbackList, getCallbackDetail, retryCallback } from '@/api/transaction'
 import type { CallbackItem } from '@/api/transaction'
+import { formatTimestamp } from '@/utils/format'
 
 const searchForm = reactive({ orderNo: '', type: '', status: '', channelType: '' })
 

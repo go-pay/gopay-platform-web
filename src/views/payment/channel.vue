@@ -85,7 +85,7 @@
                   {{ item.status === 1 ? '启用' : '停用' }}
                 </span>
               </td>
-              <td class="text-grey">{{ item.ctime }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.ctime) }}</td>
               <td>
                 <v-btn icon variant="text" size="x-small" title="编辑" @click="openDialog('edit', item)">
                   <v-icon size="18" color="#64748B">mdi-pencil-outline</v-icon>
@@ -282,7 +282,7 @@
                 <span class="detail-label">状态</span>
                 <span :class="['chip', detailItem.status === 1 ? 'chip-green' : 'chip-grey']">{{ detailItem.status === 1 ? '启用' : '停用' }}</span>
               </div>
-              <div class="detail-item"><span class="detail-label">创建时间</span><span>{{ detailItem.ctime }}</span></div>
+              <div class="detail-item"><span class="detail-label">创建时间</span><span>{{ formatTimestamp(detailItem.ctime) }}</span></div>
               <div class="detail-item"><span class="detail-label">备注</span><span>{{ detailItem.remark || '-' }}</span></div>
             </div>
           </div>
@@ -315,6 +315,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { getChannelList, addChannel, updateChannel, toggleChannelStatus, getChannelDetail, saveChannelConfig } from '@/api/channel'
 import { getMerchantOptions } from '@/api/merchant'
+import { formatTimestamp } from '@/utils/format'
 
 interface ChannelConfig {
   appId: string

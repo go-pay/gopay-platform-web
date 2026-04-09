@@ -77,8 +77,8 @@
               </td>
               <td>{{ item.reviewer }}</td>
               <td class="text-grey text-ellipsis">{{ item.reviewRemark || '-' }}</td>
-              <td class="text-grey">{{ item.ctime }}</td>
-              <td class="text-grey">{{ item.reviewTime }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.ctime) }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.reviewTime) }}</td>
               <td>
                 <v-btn icon variant="text" size="x-small" title="查看详情" @click="handleView(item)">
                   <v-icon size="18" color="#64748B">mdi-eye-outline</v-icon>
@@ -112,7 +112,7 @@
               <div class="detail-item"><span class="detail-label">营业执照号</span><span>{{ detailItem.licenseNo }}</span></div>
               <div class="detail-item"><span class="detail-label">法人姓名</span><span>{{ detailItem.legalPerson }}</span></div>
               <div class="detail-item"><span class="detail-label">联系电话</span><span>{{ detailItem.phone }}</span></div>
-              <div class="detail-item"><span class="detail-label">申请时间</span><span>{{ detailItem.ctime }}</span></div>
+              <div class="detail-item"><span class="detail-label">申请时间</span><span>{{ formatTimestamp(detailItem.ctime) }}</span></div>
             </div>
           </div>
           <div class="detail-section">
@@ -125,7 +125,7 @@
                 </span>
               </div>
               <div class="detail-item"><span class="detail-label">审核人</span><span>{{ detailItem.reviewer }}</span></div>
-              <div class="detail-item"><span class="detail-label">审核时间</span><span>{{ detailItem.reviewTime }}</span></div>
+              <div class="detail-item"><span class="detail-label">审核时间</span><span>{{ formatTimestamp(detailItem.reviewTime) }}</span></div>
               <div class="detail-item"><span class="detail-label">审核意见</span><span>{{ detailItem.reviewRemark || '-' }}</span></div>
             </div>
           </div>
@@ -141,6 +141,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { getRecordList, getRecordDetail, type RecordItem } from '@/api/incoming'
+import { formatTimestamp } from '@/utils/format'
 
 const searchForm = reactive({ merchantName: '', channelType: '', status: '', reviewDate: '' })
 

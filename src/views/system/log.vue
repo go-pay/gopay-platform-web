@@ -76,7 +76,7 @@
               <td>
                 <span :class="['chip', item.success ? 'chip-green' : 'chip-red']">{{ item.success ? '成功' : '失败' }}</span>
               </td>
-              <td class="text-grey">{{ item.ctime }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.ctime) }}</td>
               <td>
                 <v-btn icon variant="text" size="x-small" title="详情" @click="openDetail(item)">
                   <v-icon size="18" color="#64748B">mdi-eye-outline</v-icon>
@@ -106,7 +106,7 @@
               <div class="detail-item"><span class="detail-label">操作结果</span><span :class="['chip', detailItem.success ? 'chip-green' : 'chip-red']">{{ detailItem.success ? '成功' : '失败' }}</span></div>
               <div class="detail-item"><span class="detail-label">IP 地址</span><code class="code-text">{{ detailItem.ip }}</code></div>
               <div class="detail-item"><span class="detail-label">User-Agent</span><span class="text-small">{{ detailItem.userAgent }}</span></div>
-              <div class="detail-item"><span class="detail-label">操作时间</span><span>{{ detailItem.ctime }}</span></div>
+              <div class="detail-item"><span class="detail-label">操作时间</span><span>{{ formatTimestamp(detailItem.ctime) }}</span></div>
               <div class="detail-item"><span class="detail-label">耗时</span><span>{{ detailItem.duration }}ms</span></div>
             </div>
           </div>
@@ -128,6 +128,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { getLogList, getLogDetail, exportLogs, type LogItem } from '@/api/system'
+import { formatTimestamp } from '@/utils/format'
 
 const searchForm = reactive({ operator: '', module: '', action: '', date: '' })
 

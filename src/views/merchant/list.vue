@@ -65,7 +65,7 @@
                   {{ item.status === 1 ? '正常' : '禁用' }}
                 </span>
               </td>
-              <td class="text-grey">{{ item.ctime }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.ctime) }}</td>
               <td>
                 <v-btn icon variant="text" size="x-small" title="编辑" @click="handleEdit(item)">
                   <v-icon size="18" color="#64748B">mdi-pencil-outline</v-icon>
@@ -132,6 +132,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { getMerchantList, addMerchant, updateMerchant, toggleMerchantStatus } from '@/api/merchant'
+import { formatTimestamp } from '@/utils/format'
 
 interface Merchant {
   id: number
@@ -141,7 +142,7 @@ interface Merchant {
   email: string
   status: number
   remark: string
-  ctime: string
+  ctime: number
 }
 
 const searchForm = reactive({ name: '', contact: '', status: '' })

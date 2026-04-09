@@ -70,7 +70,7 @@
                   {{ item.status === 1 ? '正常' : '禁用' }}
                 </span>
               </td>
-              <td class="text-grey">{{ item.ctime }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.ctime) }}</td>
               <td>
                 <v-btn icon variant="text" size="x-small" title="编辑" @click="handleEdit(item)">
                   <v-icon size="18" color="#64748B">mdi-pencil-outline</v-icon>
@@ -151,6 +151,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { getMerchantAppList, addMerchantApp, updateMerchantApp, type MerchantApp } from '@/api/merchantApp'
 import { getMerchantOptions } from '@/api/merchant'
+import { formatTimestamp } from '@/utils/format'
 
 const route = useRoute()
 

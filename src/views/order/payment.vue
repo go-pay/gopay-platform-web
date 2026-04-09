@@ -92,8 +92,8 @@
               <td>
                 <span :class="['chip', statusChipClass(item.status)]">{{ statusLabel(item.status) }}</span>
               </td>
-              <td class="text-grey">{{ item.ctime }}</td>
-              <td class="text-grey">{{ item.payTime || '-' }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.ctime) }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.payTime) }}</td>
               <td>
                 <v-btn icon variant="text" size="x-small" title="查看详情" @click="openDetail(item)">
                   <v-icon size="18" color="#64748B">mdi-eye-outline</v-icon>
@@ -149,8 +149,8 @@
               </div>
               <div class="detail-item"><span class="detail-label">支付方式</span><span>{{ payMethodLabel(detailItem.payMethod) }}</span></div>
               <div class="detail-item"><span class="detail-label">通道订单号</span><code class="code-text">{{ detailItem.tradeNo || '-' }}</code></div>
-              <div class="detail-item"><span class="detail-label">创建时间</span><span>{{ detailItem.ctime }}</span></div>
-              <div class="detail-item"><span class="detail-label">支付时间</span><span>{{ detailItem.payTime || '-' }}</span></div>
+              <div class="detail-item"><span class="detail-label">创建时间</span><span>{{ formatTimestamp(detailItem.ctime) }}</span></div>
+              <div class="detail-item"><span class="detail-label">支付时间</span><span>{{ formatTimestamp(detailItem.payTime) }}</span></div>
             </div>
           </div>
           <div class="detail-section">
@@ -209,6 +209,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { getPaymentOrderList, getPaymentOrderDetail, closePaymentOrder, refundPaymentOrder, exportPaymentOrders } from '@/api/order'
 import type { PaymentOrder } from '@/api/order'
+import { formatTimestamp } from '@/utils/format'
 
 const searchForm = reactive({ orderNo: '', merchantName: '', status: '', channelType: '', date: '' })
 

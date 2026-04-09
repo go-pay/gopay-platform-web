@@ -59,7 +59,7 @@
           <tbody>
             <tr v-for="item in billList" :key="item.id">
               <td>{{ item.id }}</td>
-              <td class="font-medium">{{ item.billDate }}</td>
+              <td class="font-medium">{{ formatTimestamp(item.billDate, 'date') }}</td>
               <td>
                 <span :class="['chip', item.channelType === 'alipay' ? 'chip-blue' : 'chip-green']">{{ item.channelType === 'alipay' ? '支付宝' : '微信支付' }}</span>
               </td>
@@ -72,7 +72,7 @@
               <td>
                 <span :class="['chip', billStatusClass(item.status)]">{{ billStatusLabel(item.status) }}</span>
               </td>
-              <td class="text-grey">{{ item.ctime }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.ctime) }}</td>
               <td>
                 <v-btn icon variant="text" size="x-small" title="查看详情" @click="openDetail(item)">
                   <v-icon size="18" color="#64748B">mdi-eye-outline</v-icon>
@@ -102,10 +102,10 @@
           <div class="detail-section">
             <div class="detail-title">对账概况</div>
             <div class="detail-grid">
-              <div class="detail-item"><span class="detail-label">对账日期</span><span>{{ detailItem.billDate }}</span></div>
+              <div class="detail-item"><span class="detail-label">对账日期</span><span>{{ formatTimestamp(detailItem.billDate, 'date') }}</span></div>
               <div class="detail-item"><span class="detail-label">通道类型</span><span :class="['chip', detailItem.channelType === 'alipay' ? 'chip-blue' : 'chip-green']">{{ detailItem.channelType === 'alipay' ? '支付宝' : '微信支付' }}</span></div>
               <div class="detail-item"><span class="detail-label">状态</span><span :class="['chip', billStatusClass(detailItem.status)]">{{ billStatusLabel(detailItem.status) }}</span></div>
-              <div class="detail-item"><span class="detail-label">生成时间</span><span>{{ detailItem.ctime }}</span></div>
+              <div class="detail-item"><span class="detail-label">生成时间</span><span>{{ formatTimestamp(detailItem.ctime) }}</span></div>
             </div>
           </div>
           <div class="detail-section">
@@ -128,6 +128,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { getBillList, generateBill, reconcileBill, getBillDetail, type BillItem } from '@/api/reconciliation'
+import { formatTimestamp } from '@/utils/format'
 
 const searchForm = reactive({ date: '', channelType: '', status: '' })
 

@@ -86,8 +86,8 @@
               <td>
                 <span :class="['chip', transferStatusClass(item.status)]">{{ transferStatusLabel(item.status) }}</span>
               </td>
-              <td class="text-grey">{{ item.ctime }}</td>
-              <td class="text-grey">{{ item.finishTime || '-' }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.ctime) }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.finishTime) }}</td>
               <td>
                 <v-btn icon variant="text" size="x-small" title="查看详情" @click="openDetail(item)">
                   <v-icon size="18" color="#64748B">mdi-eye-outline</v-icon>
@@ -198,8 +198,8 @@
               <div class="detail-item"><span class="detail-label">收款账号</span><code class="code-text">{{ detailItem.payeeAccount }}</code></div>
               <div class="detail-item"><span class="detail-label">收款人</span><span>{{ detailItem.payeeName }}</span></div>
               <div class="detail-item"><span class="detail-label">转账说明</span><span>{{ detailItem.remark || '-' }}</span></div>
-              <div class="detail-item"><span class="detail-label">创建时间</span><span>{{ detailItem.ctime }}</span></div>
-              <div class="detail-item"><span class="detail-label">完成时间</span><span>{{ detailItem.finishTime || '-' }}</span></div>
+              <div class="detail-item"><span class="detail-label">创建时间</span><span>{{ formatTimestamp(detailItem.ctime) }}</span></div>
+              <div class="detail-item"><span class="detail-label">完成时间</span><span>{{ formatTimestamp(detailItem.finishTime) }}</span></div>
             </div>
           </div>
         </div>
@@ -215,6 +215,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { getTransferOrderList, addTransferOrder, getTransferOrderDetail, type TransferOrder } from '@/api/order'
 import { getMerchantOptions } from '@/api/merchant'
+import { formatTimestamp } from '@/utils/format'
 
 const merchantOptions = ref<{ id: number; name: string }[]>([])
 

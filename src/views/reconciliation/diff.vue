@@ -64,7 +64,7 @@
           <tbody>
             <tr v-for="item in diffList" :key="item.id">
               <td>{{ item.id }}</td>
-              <td class="font-medium">{{ item.billDate }}</td>
+              <td class="font-medium">{{ formatTimestamp(item.billDate, 'date') }}</td>
               <td><code class="code-text">{{ item.orderNo }}</code></td>
               <td>
                 <span :class="['chip', item.channelType === 'alipay' ? 'chip-blue' : 'chip-green']">{{ item.channelType === 'alipay' ? '支付宝' : '微信支付' }}</span>
@@ -105,7 +105,7 @@
           <div class="detail-section">
             <div class="detail-title">差异信息</div>
             <div class="detail-grid">
-              <div class="detail-item"><span class="detail-label">对账日期</span><span>{{ detailItem.billDate }}</span></div>
+              <div class="detail-item"><span class="detail-label">对账日期</span><span>{{ formatTimestamp(detailItem.billDate, 'date') }}</span></div>
               <div class="detail-item"><span class="detail-label">订单号</span><code class="code-text">{{ detailItem.orderNo }}</code></div>
               <div class="detail-item"><span class="detail-label">通道类型</span><span :class="['chip', detailItem.channelType === 'alipay' ? 'chip-blue' : 'chip-green']">{{ detailItem.channelType === 'alipay' ? '支付宝' : '微信支付' }}</span></div>
               <div class="detail-item"><span class="detail-label">差异类型</span><span :class="['chip', diffTypeClass(detailItem.diffType)]">{{ diffTypeLabel(detailItem.diffType) }}</span></div>
@@ -160,6 +160,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { getDiffList, getDiffDetail, handleDiff, exportDiff, type DiffItem } from '@/api/reconciliation'
+import { formatTimestamp } from '@/utils/format'
 
 const searchForm = reactive({ orderNo: '', diffType: '', handleStatus: '', date: '' })
 

@@ -121,7 +121,7 @@
                   {{ item.status === 1 ? '已完成' : '处理中' }}
                 </span>
               </td>
-              <td class="text-grey">{{ item.ctime }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.ctime) }}</td>
               <td>
                 <v-btn icon variant="text" size="x-small" title="查看详情" @click="openDetail(item)">
                   <v-icon size="18" color="#64748B">mdi-eye-outline</v-icon>
@@ -179,7 +179,7 @@
                 <span class="detail-label">状态</span>
                 <span :class="['chip', detailItem.status === 1 ? 'chip-green' : 'chip-grey']">{{ detailItem.status === 1 ? '已完成' : '处理中' }}</span>
               </div>
-              <div class="detail-item"><span class="detail-label">交易时间</span><span>{{ detailItem.ctime }}</span></div>
+              <div class="detail-item"><span class="detail-label">交易时间</span><span>{{ formatTimestamp(detailItem.ctime) }}</span></div>
               <div class="detail-item"><span class="detail-label">备注</span><span>{{ detailItem.remark || '-' }}</span></div>
             </div>
           </div>
@@ -195,6 +195,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { getFlowList, getFlowStats, getFlowDetail, type FlowItem } from '@/api/transaction'
+import { formatTimestamp } from '@/utils/format'
 
 const searchForm = reactive({ flowNo: '', orderNo: '', type: '', channelType: '', date: '' })
 

@@ -73,7 +73,7 @@
                 <span :class="['chip', statusChipClass(item.status)]">{{ statusLabel(item.status) }}</span>
               </td>
               <td class="text-grey text-ellipsis">{{ item.remark || '-' }}</td>
-              <td class="text-grey">{{ item.ctime }}</td>
+              <td class="text-grey">{{ formatTimestamp(item.ctime) }}</td>
               <td>
                 <v-btn icon variant="text" size="x-small" title="查看" @click="handleView(item)">
                   <v-icon size="18" color="#64748B">mdi-eye-outline</v-icon>
@@ -242,6 +242,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { getApplyList, addApply, submitApply, reviewApply, uploadImage } from '@/api/incoming'
 import type { ApplyItem } from '@/api/incoming'
 import { getMerchantOptions } from '@/api/merchant'
+import { formatTimestamp } from '@/utils/format'
 
 const merchantOptions = ref<{ id: number; name: string }[]>([])
 

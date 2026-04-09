@@ -37,7 +37,7 @@
         </div>
         <div class="info-item">
           <span class="info-label">最后登录</span>
-          <span class="info-value">{{ userInfo.lastLogin }}</span>
+          <span class="info-value">{{ formatTimestamp(userInfo.lastLogin) }}</span>
         </div>
       </div>
     </v-card>
@@ -69,6 +69,7 @@
 import { reactive, computed, onMounted } from 'vue'
 import { useUserStore } from '@/store/user'
 import { changePwdApi } from '@/api/auth'
+import { formatTimestamp } from '@/utils/format'
 
 const userStore = useUserStore()
 
